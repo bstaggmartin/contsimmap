@@ -1,4 +1,4 @@
-# ContSimmap
+# contsimmap
 An R package for making stochastic character maps of continuous trait data on phylogenies
 
 A "stochastic character map", often called a "simulation map" or "Simmap" for short, is a means of better understanding/exploring trait evolution dynamics on phylogenies, introduced by Nielsen and expanded on by Hulsenbeck, Bollback, and others in the 2000s. The popularity of Simmaps exploded with Revell's user-friendly implementation in his phytools package for R. Unlike conventional ancestral state reconstruction, the goal of Simmapping is not to come up with the most likely ancestral states at particular nodes in a phylogeny, but simulate probable trajectories of trait evolution across the entire evolutionary history depicted in a phylogeny. In a nutshell, this means sampling ancestral states under some fitted model of evolution. Simmaps have various uses in visualization, permutation-based hypothesis testing, and integrating over uncertainty in ancestral states in a conceptually straight-forward way (e.g., musscrat, ratematrix, mvmorph).
