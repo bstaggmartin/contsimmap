@@ -1,4 +1,4 @@
-.report.names<-function(prefix=NULL,nms,suffix=NULL,printlen=Inf){
+.report.names<-function(prefix=NULL,nms,suffix=NULL,printlen=Inf,combine='and'){
   nn<-length(nms)
   if(nn==1){
     paste(prefix[1],
@@ -11,11 +11,11 @@
   }else{
     if(nn==2){
       paste(prefix[2],
-            paste(nms,collapse=' and '),
+            paste(nms,collapse=paste0(' ',combine,' ')),
             suffix[2])
     }else{
       paste0(prefix[2],' ',
-             paste(nms[-nn],collapse=', '),', and ',nms[nn],
+             paste(nms[-nn],collapse=', '),', ',combine,' ',nms[nn],
              ' ',suffix[2])
     }
   }

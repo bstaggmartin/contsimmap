@@ -134,7 +134,7 @@
       x<-x[!out.of.range]
     }
   }else if(is.character(x)){
-    x<-pmatch(x,traits)
+    x<-pmatch(x,traits,duplicates.ok=TRUE)
     out.of.range<-is.na(x)
     out.of.range[nas]<-FALSE
     if(all(out.of.range)){

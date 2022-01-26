@@ -23,8 +23,9 @@ make.contsimmap<-function(trait.data,tree,nsims=100,res=100,
   Xsig2<-.fix.mat.list(Xsig2,ntraits,traits,nstates,states)
   traits<-rownames(Xsig2[[1]])
   Ysig2<-.fix.mat.list(Ysig2,ntraits,traits,ntips,tips)
-  nobs<-tapply(rownames(trait.data),rownames(trait.data),length)
-  nobs<-.fix.nobs(nobs,ntips,tips)
+  #could use this to speed up tip loop...
+  # nobs<-tapply(rownames(trait.data),rownames(trait.data),length)
+  # nobs<-.fix.nobs(nobs,ntips,tips)
   
   #initialize arrays
   nn<-ntips+nnodes
