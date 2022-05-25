@@ -1,9 +1,33 @@
+# #new approach-->work with codes!
+# #0 --> missing data, 1 --> observed data, 2 --> observed data with infinite precision/0 variance
+# #when combining, higher numbers take priority (use max())
+# #indices for pseudo.solve operations valid whenever code is 1...
+# 
+# #need to make this more efficient
+# #0s and 2s will only ever pop up for traits in which an observation has a 0 or 2...
+# 
+# .gen.codes<-function(codes){
+#   codes<-cbind(1,codes)
+#   out<-as.matrix(do.call(expand.grid,apply(codes,1,unique)))
+#   code.lab<-do.call(paste0,asplit(out,2))
+#   list(code.num=out,code.ind=out==1,code.inf=out==2,code.lab=code.lab)
+# }
+
+
+
 #may want to make some function for auto-estimation of Xsig2/Ysig2
 #also should add some means of conditionining on specific X0s
 #need better warning/feedback about averaging behavior in cases when observations with infinite precision conflict with one another
   #this produces nonsensical results in many cases, I would think...
   #probably need a disclaimer that absolute certainty in observations, though not necessarily 0 branch lengths, should be avoided
   #in general, the parts of this function that deal with infinite precision could probably be improved in terms of efficiency
+  #new approach-->keep track of perfect and missing observations with codes, index to avoid directly dealing with them
+  #missing should be constant across sims, but perfect could change (0 entries in Xsig2...)
+  #the key is to keep track of infinite precisions in separate variance/precision matrices, with entries only being a function of branch lengths
+  #(essentially layers a new "unit-BM" process on top that takes "priority" over existing one)
+  #above approach may seem desirable, but has odd, recursive feature where observations connected by 0 branch lengths will still pose
+  #serious issues...it might be better to instead to introduce some "fudge factor" for 0s, like adding 1e-6 to X/Ysig2s with 0 entries along
+  #diagonal!
 #' @export
 make.contsimmap<-function(trait.data,tree,nsims=100,res=100,
                           Xsig2=diag(NCOL(trait.data)),
@@ -23,22 +47,85 @@ make.contsimmap<-function(trait.data,tree,nsims=100,res=100,
   Xsig2<-.fix.mat.list(Xsig2,ntraits,traits,nstates,states)
   traits<-rownames(Xsig2[[1]])
   Ysig2<-.fix.mat.list(Ysig2,ntraits,traits,ntips,tips)
-  #could use this to speed up tip loop...
-  # nobs<-tapply(rownames(trait.data),rownames(trait.data),length)
-  # nobs<-.fix.nobs(nobs,ntips,tips)
   
   #initialize arrays
   nn<-ntips+nnodes
   ntrees<-length(tree)
-  PP<-array(0,
-            dim=c(ntraits,ntraits,nn,ntrees),
-            dimnames=list(traits,traits,c(tips,seq.int(ntips+1,nn)),NULL))
-  VV<-PP
-  XX<-array(dim=c(ntraits,nn,ntrees),dimnames=dimnames(PP)[-1])
+  VV<-PP<-array(0,
+                dim=c(ntraits,ntraits,nn,ntrees),
+                dimnames=list(traits,traits,c(tips,seq.int(ntips+1,nn)),NULL))
+  inf.I<-matrix(0,ntraits,ntraits)
+  diag(inf.I)<-Inf
+  VV[]<-inf.I
+  XX<-array(0,dim=c(ntraits,nn,ntrees),dimnames=dimnames(PP)[-1])
   
-  #species means + variance
-  infs<-matrix(0,ntraits,ntraits)
-  diag(infs)<-Inf
+  ##CAN MAKE THIS ALL MORE EFFICIENT THROUGH IMPLICIT Infs/0s VIA KEEPING TRACK OF CODES##
+  ##ALSO PAVES THE WAY FOR MORE ELEGANT HANDLING OF CONFLICTING OBSERVATIONS##
+  ##WILL REQUIRE A LARGE, TIME-CONSUMING OVERHAUL##
+  # inf.PP<-PP #I'll start working on this later...
+  # inf.VV<-VV
+  # CC<-matrix(0L,nn,ntrees) #keeps track of codes...
+  # #species means + variance
+  # #I like where this is going, but need to deal with 0 variance, infinite precision cases...
+  # codes<-Yvar<-Y<-t(trait.data)
+  # tip.matches<-match(colnames(Y),tips)
+  # dims<-c(ntraits,ntraits)
+  # Yvar[]<-unlist(Ysig2[tip.matches],use.names=FALSE)[.row(dims)==.col(dims)]
+  # codes[]<-0
+  # codes[is.na(Y)]<-1
+  # codes[Yvar==0]<-2
+  # 
+  # #initialize pseudo-solve operations
+  # list2env(.gen.codes(codes),envir=environment())
+  # #OUTPUT:
+  # #code.num = matrix of numeric integers corresponding to whether trait value is missing (0), known with error (1), or known without error (2)
+  # #code.ind = matrix of TRUE/FALSE indicating if a trait value should be included in pseudo matrix operations (only if trait value is known with error)
+  # #code.inf = matrix of TRUE/FALSE indicating if a trait value is known without error
+  # #code.lab = vector of labels for all codes (just concatenated code.num)
+  # 
+  # #this function combines the codes for multiple observation
+  # com.codes<-function(codes){
+  #   match(paste0(apply(codes.num[codes,,drop=FALSE],2,max),collapse=''),code.lab)
+  # }
+  # #this functions pseudo-inverts a single matrix given corresponding code.ind
+  # holder<-matrix(0,ntraits,ntraits)
+  # single.pseudo.solve<-function(mat,code.ind){
+  #   tmp<-mat[code.ind,code.ind,drop=FALSE]
+  #   if(length(tmp)){
+  #     holder[code.ind,code.ind]<-solve(mat[code.ind,code.ind,drop=FALSE])
+  #   }
+  #   holder
+  # }
+  # #this function pseudo-inverts many matrices given a list of matrices and vector of associated code.lab's
+  # pseudo.solve<-function(mats,code.lab){
+  #   code.ind<-code.ind[code.lab,,drop=FALSE]
+  #   lapply(seq_along(mats),function(ii) single.pseudo.solve(mats[[ii]],code.ind[ii,]))
+  # }
+  # 
+  # Y<-split(Y,rep(tip.matches,each=ntraits))
+  # Y<-lapply(Y,function(ii) matrix(ii,nrow=ntraits))
+  # codes<-split(codes,tip.matches)
+  # 
+  # for(i in as.numeric(names(codes))){
+  #   tmp.tip<-tips[i]
+  #   tmp.Y<-Y[[i]]
+  #   tmp.codes<-codes[[i]]
+  #   unique.codes<-unique(tmp.codes)
+  #   unique.matches<-match(tmp.codes,unique.codes)
+  #   unique.n<-length(unique.codes)
+  #   tmp.des_P<-pseudo.solve(rep(Ysig2[tmp.tip],unique.n),unique.codes)[unique.matches]
+  #   tip.code<-com.codes(unique.codes)
+  #   CC[tmp.tip,]<-tip.code
+  #   tip.ind<-code.ind[tip.code,]
+  #   PP[tip.ind,tip.ind,tmp.tip,]<-Reduce('+',tmp.des_P)[tip.ind,tip.ind,drop=FALSE]
+  #   VV[tip.ind,tip.ind,]<-solve(PP[tip.ind,tip.ind,tmp.tip,1])
+  #   
+  #   #infinite precision observations
+  #   tip.inf<-code.inf[tip.code,]
+  #   PP[tip.inf,tip.inf,tmp.tip,]<-inf.I[tip.inf,tip.inf]
+  #   VV[tip.inf,tip.inf,tmp.tip,]<-0
+  # }
+  
   for(i in tips){
     des_X<-t(trait.data[rownames(trait.data)==i,,drop=FALSE])
     des_n<-ncol(des_X)
@@ -58,9 +145,11 @@ make.contsimmap<-function(trait.data,tree,nsims=100,res=100,
       if(any(inf.prec)&des_n>1){
         warning('PLACEHOLDER ABOUT MULTIPLE OBSERVATIONS WITH 0 INTRASPECIFIC VARIANCE')
         XX[inf.prec,i,]<-.rowMeans(des_X[inf.prec,,drop=FALSE],sum(inf.prec),des_n)
+      }else{
+        XX[inf.prec,i,]<-des_X
       }
     }else{
-      VV[,,i,]<-infs
+      VV[,,i,]<-inf.I
       XX[,i,]<-0
     }
   }

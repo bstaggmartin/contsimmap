@@ -1,6 +1,6 @@
 #helper function to merge lists in contsimmap by trait
 #then automatically makes a function that resplits and integrates those merged lists back into contsimmap object
-.extract.traits<-function(contsimmap,foc.traits,lhs){
+.extract.traits<-function(contsimmap,foc.traits,lhs,traits2rates=FALSE){
   ntraits<-ntrait(contsimmap)
   nts<-lapply(contsimmap[['x']],function(ii) lengths(ii)/ntraits)
   edge.seq<-seq_along(nts)
@@ -18,40 +18,62 @@
     contsimmap[['traits']][seq_len(n.new.traits)+ntraits]<-new.traits
     trait.ind<-match(foc.traits,contsimmap[['traits']])
   }
-  nodes<-contsimmap[['nodes']]
-  nnodes<-length(nodes)
-  node.array<-array(unlist(nodes,use.names=FALSE),
-                    c(dim(nodes[[1]]),nnodes),
-                    list(NULL,NULL,names(nodes)))
-  tmp.nodes<-asplit(node.array[trait.ind,,,drop=FALSE],1)
-  out<-setNames(rep(contsimmap['x'],length(foc.traits)),foc.traits)
-  for(i in seq_along(foc.traits)){
-    for(j in edge.seq){
-      for(k in tree.seq){
-        out[[i]][[j]][[k]]<-out[[i]][[j]][[k]][,trait.ind[i],,drop=FALSE]
-      }
-    }
-    out[[i]]<-c(tmp.nodes[[i]],unlist(out[[i]],use.names=FALSE))
-  }
-  init.split<-rep.int(2,length(out[[1]]))
-  init.split[seq_along(tmp.nodes[[1]])]<-1
-  resplit.and.integrate<-function(foc.traits){
-    for(i in trait.seq[lhs]){
-      init<-split(foc.traits[[i]],init.split)
-      edges<-split(init[[2]],edge.split.inds)
-      nodes<-init[[1]]
+  if(traits2rates){
+    #exclude nodes (they don't affect regimes) and make resplit.and.integrate "fxn" just a contsimmap with indices for constructing simmaps
+    out<-setNames(rep(contsimmap['x'],length(foc.traits)),foc.traits)
+    resplit.and.integrate<-contsimmap['x']
+    counter<-0
+    for(i in seq_along(foc.traits)){
       for(j in edge.seq){
-        tmp<-split(edges[[j]],tree.split.inds[[j]])
         for(k in tree.seq){
-          contsimmap[['x']][[j]][[k]][,trait.ind[i],]<-tmp[[k]]
+          tmp<-out[[i]][[j]][[k]][,trait.ind[i],,drop=FALSE]
+          out[[i]][[j]][[k]]<-tmp
+          if(i==1){
+            tmp.nt<-nts[[j]][k]
+            tmp[]<-seq_len(tmp.nt)+counter
+            counter<-counter+tmp.nt
+            resplit.and.integrate[[1]][[j]][[k]]<-tmp
+          }
         }
       }
-      node.array[trait.ind[i],,]<-nodes
+      out[[i]]<-unlist(out[[i]],use.names=FALSE)
     }
-    contsimmap[['nodes']]<-asplit(node.array,3)
-    contsimmap
+  }else{
+    nodes<-contsimmap[['nodes']]
+    nnodes<-length(nodes)
+    node.array<-array(unlist(nodes,use.names=FALSE),
+                      c(dim(nodes[[1]]),nnodes),
+                      list(NULL,NULL,names(nodes)))
+    tmp.nodes<-asplit(node.array[trait.ind,,,drop=FALSE],1)
+    out<-setNames(rep(contsimmap['x'],length(foc.traits)),foc.traits)
+    for(i in seq_along(foc.traits)){
+      for(j in edge.seq){
+        for(k in tree.seq){
+          out[[i]][[j]][[k]]<-out[[i]][[j]][[k]][,trait.ind[i],,drop=FALSE]
+        }
+      }
+      out[[i]]<-c(tmp.nodes[[i]],unlist(out[[i]],use.names=FALSE))
+    }
+    init.split<-rep.int(2,length(out[[1]]))
+    init.split[seq_along(tmp.nodes[[1]])]<-1
+    resplit.and.integrate<-function(foc.traits){
+      for(i in trait.seq[lhs]){
+        init<-split(foc.traits[[i]],init.split)
+        edges<-split(init[[2]],edge.split.inds)
+        nodes<-init[[1]]
+        for(j in edge.seq){
+          tmp<-split(edges[[j]],tree.split.inds[[j]])
+          for(k in tree.seq){
+            contsimmap[['x']][[j]][[k]][,trait.ind[i],]<-tmp[[k]]
+          }
+        }
+        node.array[trait.ind[i],,]<-nodes
+      }
+      contsimmap[['nodes']]<-asplit(node.array,3)
+      contsimmap
+    }
   }
-  out<-c(out,fxn=resplit.and.integrate)
+  out<-c(out,placeholder_n=length(out[[1]]),fxn=resplit.and.integrate)
   out
 }
 
@@ -120,7 +142,7 @@ make.traits<-function(contsimmap,...){
   calls<-lapply(formulae,function(ii) ii[[3]])
   other.traits<-unlist(lapply(calls,all.vars),use.names=FALSE)
   foc.traits<-c(out.traits,other.traits)
-  lhs<-rep(c(TRUE,FALSE),c(length(out.traits),length(other.traits)))
+  lhs<-rep(c(TRUE,FALSE),c(length(out.traits),length(other.traits)+1))
   #maybe don't check for variable names, just let calls run their course and throw an error if they don't find the right variable
   #make sure to have some warning about how formulae are applied in sequence regarding new traits created in same function, replacements, etc...
   #actually not sure what the priority is regarding eval() with multiple variables named the same thing...
@@ -291,10 +313,118 @@ as.simmap<-function(contsimmap,trait=1,...){
   }
   for(i in seq_len(nsims)){
     nodes[]<-unlist(lapply(out[[i]][['maps']],
-                           function(ii) names(ii)[c(1,length(ii))]))
+                           function(ii) names(ii)[c(1,length(ii))]),use.names=FALSE)
     tips[]<-nodes[2,tip.inds]
     out[[i]][c('mapped.edge','node.states','states','breaks')]<-list(foo(out[[i]]),t(nodes),tips,breaks)
   }
   class(out)<-c('multiSimmap','multiPhylo')
   out
 }
+
+#make simmaps with Xsig2 regimes based off contsimmap traits
+#should make this more convenient down the line
+#while I would love to let correlations continuously change, it's too easy to get impossible correlation structures...
+#for now, set to numeric constant, but eventually allow for folks to call discrete states and new trait construction functions
+#and let correlations vary between states
+#' @export
+traits2rates<-function(contsimmap,Xvar=NA,Xcor=diag(length(Xvar))){
+  if(nedge(contsimmap)<Nedge(contsimmap)){
+    if(length(contsimmap[['nodes']])==1){
+      stop('The traits2rates() function will support single subtrees in the future, but not yet')
+    }else{
+      stop('The traits2rates() function does not work with contsimmaps consisting of multiple subtrees--did you mean to subset the edges in your contsimmaps?')
+    }
+  }
+  k<-length(Xvar)
+  out.traits<-trimws(unlist(lapply(strsplit(as.character(Xvar),'~'),'[[',1),use.names=FALSE))
+  out.traits<-paste0('TEMPORARY_',contsimmap:::.fix.trait.names(k,out.traits)) #to avoid accidental replacements...
+  calls<-lapply(Xvar,function(ii) ii[[length(ii)]])
+  other.traits<-unlist(lapply(calls,all.vars),use.names=FALSE)
+  foc.traits<-c(out.traits,other.traits)
+  lhs<-rep(c(TRUE,FALSE),c(k,length(other.traits)+1))
+  #maybe don't check for variable names, just let calls run their course and throw an error if they don't find the right variable
+  #make sure to have some warning about how formulae are applied in sequence regarding new traits created in same function, replacements, etc...
+  #actually not sure what the priority is regarding eval() with multiple variables named the same thing...
+  foc.traits<-contsimmap:::.extract.traits(contsimmap,foc.traits,lhs,traits2rates=TRUE)
+  regime.map<-foc.traits[['fxn']]
+  foc.traits<-foc.traits[-length(foc.traits)]
+  for(i in seq_along(Xvar)){
+    foc.traits[[i]]<-with(foc.traits,eval(calls[[i]]))
+  }
+  Xsds<-sqrt(do.call(rbind,foc.traits[lhs]))
+  Xsig2<-array(Xcor,c(k,k,foc.traits[['placeholder_n']]))
+  Xsig2<-sweep(Xsig2,c(1,3),Xsds,'*')
+  Xsig2<-sweep(Xsig2,c(2,3),Xsds,'*')
+
+
+  #lots of initialization for main loop
+  out<-contsimmap[['tree']][[1]]
+  class(out)<-c('simmap','phylo')
+  out[['maps']]<-vector('list',nrow(out[['edge']]))
+  out[['node.states']]<-out[['states']]<-out[['mapped.edge']]<-NULL
+  nsims<-nsim(contsimmap)
+  out<-rep(list(out),nsims)
+  
+  tree.seq<-seq_along(contsimmap[['tree']])
+  perm.inds<-contsimmap[['perm.inds']]
+  out.inds<-perm.inds[,1]
+  out.inds<-split(seq_along(out.inds),out.inds)
+  sims.per.tree<-lengths(out.inds)
+  sim.seqs<-lapply(sims.per.tree,seq_len)
+  perm.inds<-perm.inds[,3]
+  mapped.edge.nms<-vector('list',nsims)
+  nedges<-nedge(contsimmap)
+  edge.seq<-seq_len(nedges)
+  #main loop: preparing 'maps' elements
+  for(i in edge.seq){
+    edge<-contsimmap[['x']][[i]]
+    maps<-contsimmap[['maps']][[i]]
+    for(j in tree.seq){
+      tmp.out.inds<-out.inds[[j]]
+      tmp.map<-maps[[j]][['dts']]
+      tmp.nms<-regime.map[[i]][[j]]
+      tmp.nms[]<-as.character(tmp.nms)
+      sim.seq<-sim.seqs[[j]]
+      for(k in sim.seq){
+        tmp.tmp.nms<-tmp.nms[,,k,drop=FALSE]
+        out[[tmp.out.inds[k]]][['maps']][[i]]<-setNames(tmp.map,tmp.tmp.nms)
+        #this could be made more efficient by pre-allocating elements using numbers computed in .extract.traits...but fine for now
+        mapped.edge.nms[[tmp.out.inds[k]]]<-c(mapped.edge.nms[[tmp.out.inds[k]]],tmp.tmp.nms)
+      }
+    }
+  }
+  #get extra simmap elements --> mapped.edge, node.states, states
+  #also added breaks so folks could keep track of break points...
+  edge<-out[[1]][['edge']]
+  nodes<-t(edge)
+  tips<-out[[1]][['tip.label']]
+  ntips<-length(tips)
+  tips<-setNames(vector('character',ntips),tips)
+  tip.inds<-which(nodes[2,]<=ntips)
+  tip.inds<-tip.inds[order(nodes[2,tip.inds])]
+  ncols<-lengths(mapped.edge.nms)
+  edge.nms<-paste(edge[,1],edge[,2],sep=',')
+  foo<-function(i){
+    holder<-matrix(0,nedges,ncols[i],
+                   dimnames=list(edge.nms,'state'=mapped.edge.nms[[i]]))
+    counter<-0
+    nstates<-lengths(out[[i]][['maps']])
+    for(j in edge.seq){
+      holder[j,counter+seq_len(nstates[j])]<-out[[i]][['maps']][[j]]
+      counter<-counter+nstates[j]
+    }
+    holder
+  }
+  for(i in seq_len(nsims)){
+    nodes[]<-unlist(lapply(out[[i]][['maps']],
+                           function(ii) names(ii)[c(1,length(ii))]),use.names=FALSE)
+    tips[]<-nodes[2,tip.inds]
+    out[[i]][c('mapped.edge','node.states','states')]<-list(foo(i),t(nodes),tips)
+  }
+  class(out)<-c('multiSimmap','multiPhylo')
+  
+  list(tree=out,Xsig2=setNames(asplit(Xsig2,3),seq_len(foc.traits[['placeholder_n']])))
+}
+
+# #function to simplify above maps to only have 1 state per branch for quicker simulation!
+# collapse.traits2rates<-function()

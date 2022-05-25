@@ -171,10 +171,11 @@
       maps<-contsimmap[['maps']][[i]]
       for(j in tree.seq){
         foc<-maps[[j]]
-        tmp.inds<-c(1,seq_len(nts[j,i]-2),nts[j,i]-2)
+        if(join.lines){
+          tmp.inds<-c(1,seq_len(nts[j,i]-2),nts[j,i]-2)
+        }
         if(time.flag){
           if(join.lines){
-            #somewhat redundant
             contsimmap[['z1']][['@tTTt@']][[i]][[j]][]<-foc[['ts']][tmp.inds]
           }else{
             contsimmap[['z1']][['@tTTt@']][[i]][[j]][]<-foc[['ts']]

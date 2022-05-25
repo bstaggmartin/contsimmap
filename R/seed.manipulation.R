@@ -71,6 +71,8 @@
                                        ntraits,traits,nstates,states,
                                        treeID,nts,sims.per.tree,seeds.per.tree.edge){
   ancs<-as.numeric(ancs)
+  diag.inds<-seq_along(traits)
+  diag.inds<-cbind(diag.inds,diag.inds)
   ntrees<-length(maps[[1]])
   tree.seq<-seq_len(ntrees)
   cholX<-lapply(Xsig2,function(ii) t(.pseudo.chol(ii)))
@@ -139,8 +141,8 @@
         tmp2<-tmp1%*%tmp_PP[,,k]
         #if any tmp_PP is infinite, then current node has infinite precision and must remain the same
         #if any of tmp1 is 0, then ancestral node is equivalent to current node and current node should be set to ancestral node
-        anc.inf.prec<-!(diag(tmp1))
-        cur.inf.prec<-is.infinite(diag(tmp_PP[,,k]))
+        anc.inf.prec<-!(tmp1[diag.inds])
+        cur.inf.prec<-is.infinite(tmp_PP[cbind(diag.inds,k)])
         #correct for any infinite precisions to prevent NaN propagation
         tmp2[anc.inf.prec,]<-0
         tmp2[,anc.inf.prec]<-0
