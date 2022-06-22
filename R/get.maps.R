@@ -67,8 +67,15 @@
         #turned out the issue was a rounding error causing the positions of the last two entries to be switched!
         #see if statement to fix this above
         #still think it's best to probably just not search for duplicates
-        excl.inds<- -c(1,tlen)
-        dt<-t[excl.inds]-t[excl.inds[2]+c(0,1)]
+        # excl.inds<- -c(1,tlen)
+        # dt<-t[excl.inds]-t[excl.inds[2]+c(0,1)]
+        # t<-t[excl.inds]
+        dt<-t[-1]-t[-length(t)]
+        dups<-dt<1e-14
+        tmp.len<-sum(!dups)+1
+        excl.inds<- -(which(dups)+1)
+        dt<-t[excl.inds][-1]-t[excl.inds][-tmp.len]
+        excl.inds<-c(-1,excl.inds)
         t<-t[excl.inds]
         out[!single.state][[j]]<-list(ts=t,
                                       dts=dt,

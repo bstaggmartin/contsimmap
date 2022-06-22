@@ -14,14 +14,20 @@
                            ancs,cladewise.ord,maps,
                            Xsig2,X0,
                            ntraits,traits,nstates,states,
-                           treeID,nts,sims.per.tree,seeds.per.tree.edge){
+                           treeID,nts,sims.per.tree,seeds.per.tree.edge,
+                           scalar.trait=FALSE,original=NULL,rate.inds=NULL,scalar.inds=NULL){
   ancs<-as.numeric(ancs)
   tree.seq<-seq_along(maps[[1]])
   cholX<-lapply(Xsig2,function(ii) t(.pseudo.chol(ii)))
   X0<-split(X0,rep(treeID,each=ntraits))
   X0<-lapply(tree.seq,function(ii) matrix(X0[[ii]],ntraits,sims.per.tree))
   e<-length(seed)
-  out<-setNames(vector('list',e),seq_len(e))
+  if(scalar.trait){
+    out<-original
+    var.rates<-which(!is.na(rate.inds))
+  }else{
+    out<-setNames(vector('list',e),seq_len(e))
+  }
   for(i in cladewise.ord){
     map<-maps[[i]]
     state<-unlist(rep(lapply(map,'[[','state'),sims.per.tree))
@@ -34,6 +40,11 @@
     #scale
     dts<-unlist(rep(lapply(map,function(ii) sqrt(ii[['dts']])),sims.per.tree))
     dx<-sweep(dx,2,dts,'*')
+    if(scalar.trait){
+      for(j in var.rates){
+        dx[j,]<-dx[j,]*sqrt(unlist(lapply(original[[i]],function(ii) ii[,rate.inds[j],,drop=FALSE])))
+      }
+    }
     #accumulate
     anc<-ancs[i]
     is.root<-anc==0
@@ -45,7 +56,11 @@
       if(is.root){
         x[[j]][,1,]<-x[[j]][,1,]+X0[[j]]
       }else{
-        x[[j]][,1,]<-x[[j]][,1,]+out[[anc]][[j]][nts[j,anc],,]
+        if(scalar.trait){
+          x[[j]][,1,]<-x[[j]][,1,]+out[[anc]][[j]][nts[j,anc],scalar.inds,]
+        }else{
+          x[[j]][,1,]<-x[[j]][,1,]+out[[anc]][[j]][nts[j,anc],,]
+        }
       }
       if(dim(x[[j]])[2]>1){ #prevents dimension dropping
         x[[j]]<-apply(x[[j]],c(1,3),cumsum) #faster than Reduce()
@@ -58,7 +73,13 @@
         x[[j]]<-aperm(x[[j]],c(2,1,3))
       }
     }
-    out[[i]]<-x
+    if(scalar.trait){
+      for(j in tree.seq){
+        out[[i]][[j]][,scalar.inds,]<-x[[j]]
+      }
+    }else{
+      out[[i]]<-x
+    }
   }
   out
 }
