@@ -7,7 +7,5 @@
 #'
 #' @docType package
 #' @name contsimmap
-#' @import Rcpp methods graphics ape phytools
-#' @importFrom rstan sampling optimizing
-#' @useDynLib contsimmap, .registration=TRUE
+#' @import methods graphics ape phytools
 NULL
