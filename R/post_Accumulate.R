@@ -1,5 +1,5 @@
 #' @export
-accumulate<-function(x,FUN="+",...){
+accumulate<-function(x,FUN="+",...,forget.prev=FALSE){
   #now using "reserved" (RES) variables in call.envir rather than messing with scoping too much
   #ugh, for some reason you need to manually add call.envir (should always be parent.frame() I think to)
   #why do I have to do this here but not for other functions like threshold()???
@@ -59,15 +59,31 @@ accumulate<-function(x,FUN="+",...){
   anc[is.na(anc)]<-1
   anc<-c(0,anc)
   nts<-rbind(1,.get.ns(contsimmap))
-  for(e in rev(prune.seq)[-1]){
-    for(t in tree.seq){
-      args.ls[[1]]<-tmp.x[[anc[[e]],t]][nts[anc[[e]],t],,drop=FALSE]
-      args.ls[[2]]<-tmp.x[[e,t]][1,,drop=FALSE]
-      tmp.x[[e,t]][1,]<-do.call(FUN,args.ls)
-      for(k in seq_len(nts[e,t])[-1]){
-        args.ls[[1]]<-tmp.x[[e,t]][k-1,,drop=FALSE]
-        args.ls[[2]]<-tmp.x[[e,t]][k,,drop=FALSE]
-        tmp.x[[e,t]][k,]<-do.call(FUN,args.ls)
+  if(forget.prev){
+    tmp.x.old<-tmp.x
+    for(e in rev(prune.seq)[-1]){
+      for(t in tree.seq){
+        args.ls[[1]]<-tmp.x.old[[anc[[e]],t]][nts[anc[[e]],t],,drop=FALSE]
+        args.ls[[2]]<-tmp.x.old[[e,t]][1,,drop=FALSE]
+        tmp.x[[e,t]][1,]<-do.call(FUN,args.ls)
+        for(k in seq_len(nts[e,t])[-1]){
+          args.ls[[1]]<-tmp.x.old[[e,t]][k-1,,drop=FALSE]
+          args.ls[[2]]<-tmp.x.old[[e,t]][k,,drop=FALSE]
+          tmp.x[[e,t]][k,]<-do.call(FUN,args.ls)
+        }
+      }
+    }
+  }else{
+    for(e in rev(prune.seq)[-1]){
+      for(t in tree.seq){
+        args.ls[[1]]<-tmp.x[[anc[[e]],t]][nts[anc[[e]],t],,drop=FALSE]
+        args.ls[[2]]<-tmp.x[[e,t]][1,,drop=FALSE]
+        tmp.x[[e,t]][1,]<-do.call(FUN,args.ls)
+        for(k in seq_len(nts[e,t])[-1]){
+          args.ls[[1]]<-tmp.x[[e,t]][k-1,,drop=FALSE]
+          args.ls[[2]]<-tmp.x[[e,t]][k,,drop=FALSE]
+          tmp.x[[e,t]][k,]<-do.call(FUN,args.ls)
+        }
       }
     }
   }
@@ -93,3 +109,4 @@ accumulate<-function(x,FUN="+",...){
   attr(out,'params')<-params
   out
 }
+

@@ -149,7 +149,7 @@ as.contsimmap<-function(fit,res=100,tol=0.001,max.iter=1e5,verbose=FALSE){
   #now for the million-dollar test...
   Ysig2<-if(any(dimnames(chains)[[2]]=='Y_sig2')) as.list(chains[,'Y_sig2',,drop=FALSE]) else NULL
   tmp<-fit[['call']][['trait.se']]
-  not.nas<-!is.na(tmp)
+  not.nas<-!is.na(tmp)&!is.infinite(tmp)
   Ysig2<-c(list(Ysig2),setNames(as.list(tmp[not.nas]),rownames(tmp[not.nas,,drop=FALSE])))
   dat<-fit[['call']][['trait.data']]
   form<-as.formula(paste0(colnames(dat),"~diffusion(",colnames(dat),"_Xsig2='exp_R',Ysig2=Ysig2,trait.data=dat",if(verbose) ",verbose=TRUE",")"))

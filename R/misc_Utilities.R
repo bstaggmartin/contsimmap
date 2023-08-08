@@ -61,6 +61,7 @@
   out
 }
 
+#could probably make more use of this function...
 .stored.nodes<-function(contsimmap){
   as.numeric(gsub('N','',unique(grep('N',dimnames(contsimmap)[[1]],value=TRUE))))
 }
@@ -68,24 +69,87 @@
 .report.names<-function(prefix=NULL,nms,suffix=NULL,printlen=Inf,combine='and'){
   nn<-length(nms)
   if(nn==1){
-    paste(prefix[1],
-          nms,
-          suffix[1])
+    out<-paste(prefix[1],
+               nms,
+               suffix[1])
   }else if(nn>printlen){
-    paste(prefix[2],
-          paste(c(nms[seq_len(printlen)],'...'),collapse=', '),
-          suffix[2])
+    out<-paste(prefix[2],
+               paste(c(nms[seq_len(printlen)],'...'),collapse=', '),
+               suffix[2])
   }else{
     if(nn==2){
-      paste(prefix[2],
-            paste(nms,collapse=paste0(' ',combine,' ')),
-            suffix[2])
+      out<-paste(prefix[2],
+                 paste(nms,collapse=paste0(' ',combine,' ')),
+                 suffix[2])
     }else{
-      paste0(prefix[2],' ',
-             paste(nms[-nn],collapse=', '),', ',combine,' ',nms[nn],
-             ' ',suffix[2])
+      out<-paste0(prefix[2],' ',
+                  paste(nms[-nn],collapse=', '),', ',combine,' ',nms[nn],
+                  ' ',suffix[2])
     }
   }
+  trimws(out)
+}
+
+
+.nice.array.print<-function(x,def.nm,nrows,ncols,nslices,...){
+  if(!is.list(x)){
+    if(length(dim(x))<3){
+      x<-list(x)
+    }else{
+      x<-asplit(x,3)
+    }
+  }else{
+    if(length(dim(x))==2){
+      x<-asplit(x,1)
+    }
+  }
+  tmp<-length(x)-nslices
+  if(tmp>0){
+    x<-x[1:nslices]
+    slice.message<-paste0("\n\n\t\t [ omitted ",
+                          tmp,
+                          if(tmp>1) " slices" else " slice",
+                          " ] ")
+  }else{
+    slice.message<-NULL
+  }
+  nms<-names(x)
+  if(is.null(nms)){
+    nms<-rep(NA,length(x))
+  }
+  nas<-which(is.na(nms))
+  nms<-paste0("$",nms)
+  nms[nas]<-paste0(def.nm,"[[",nas,']]')
+  for(i in seq_along(x)){
+    tmp<-x[[i]]
+    twod<-length(dim(tmp))==2
+    tmp.messages<-NULL
+    tmp.rows<-NROW(tmp)-nrows
+    if(tmp.rows>0){
+      tmp<-if(twod) tmp[1:nrows,,drop=FALSE] else tmp[1:nrows,drop=FALSE]
+      tmp.messages<-c(tmp.messages,paste0(tmp.rows,if(tmp.rows>1) " rows" else " row"))
+    }
+    if(twod){
+      tmp.cols<-ncol(tmp)-ncols
+      if(tmp.cols>0){
+        tmp<-tmp[,1:ncols,drop=FALSE]
+        tmp.messages<-c(tmp.messages,paste0(tmp.cols,if(tmp.cols>1) " columns" else " column"))
+      }
+    }
+    if(length(tmp.messages)){
+      rowcol.message<-paste0("\t\t [ omitted ",.report.names(nms=tmp.messages)," ] ")
+    }else{
+      rowcol.message<-NULL
+    }
+    if(length(x)>1){
+      cat("\n\n\t\t",nms[i],"\n",sep="")
+    }else{
+      cat("\n\n")
+    }
+    writeLines(paste0("\t\t",capture.output(print(tmp,max=1e8,...))))
+    cat(rowcol.message)
+  }
+  cat(slice.message)
 }
 
 .prog<-function(cur){

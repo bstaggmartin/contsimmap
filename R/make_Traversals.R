@@ -200,6 +200,16 @@
   list(seed,trait.data)
 }
 
+#This actually might not be necessary--unconditional traversal is honestly pretty fast
+# .uncond.traversals.uni<-function(prune.seq,anc,edge.mat,ntips,
+#                                  maps,
+#                                  X0,nobs,Xsig2,Ysig2,mu,lookup,
+#                                  nts,seed,
+#                                  Xsig2.mods=NULL,mu.mods=NULL,
+#                                  verbose=FALSE){
+#   
+# }
+
 .cond.traversals<-function(prune.seq,anc,des,ndes,
                            maps,
                            parsed.obs,parsed.mis,nobs,Xsig2,Ysig2,mu,lookup,
@@ -256,9 +266,6 @@
   }
   get.nobs<-function(){
     nobs[e,tmp.pars[1]]
-  }
-  get.ndes<-function(){
-    ndes[e]
   }
   get.obs.x<-function(){
     parsed.obs[[e,tmp.pars[1]]]
@@ -379,20 +386,21 @@
   }
   for(e in prune.seq){
     not.root<-e>1
+    tmp.ndes<-ndes[e]
+    tmp.has.des<-tmp.ndes>0
     for(t in seq_len(ntrees)){
       for(l in seq_len(lookups.per.tree[t])){
         tmp.pars<-get.pars()
         tmp.inds<-get.inds()
         tmp.nsim<-get.nsim()
         tmp.nobs<-get.nobs()
-        tmp.ndes<-get.ndes()
         tmp.x<-NULL
         tmp.p<-NULL
         if(tmp.nobs>0){
           tmp.x<-get.obs.x()
           tmp.p<-get.obs.p()
         }
-        if(tmp.ndes>0){
+        if(tmp.has.des){
           tmp.x<-get.x()
           tmp.p<-get.p()
           v[[e,t]][,,NTS[e,t],tmp.inds]<-calc.v()
@@ -625,3 +633,149 @@
   x
 }
 
+# .cond.traversals.uni<-function(prune.seq,anc,des,ndes,
+#                                maps,
+#                                parsed.obs,parsed.mis,nobs,Xsig2,Ysig2,mu,lookup,
+#                                nts,NTS,t1s,seed,x,v,dx,dv,
+#                                Xsig2.mods=NULL,mu.mods=NULL,
+#                                verbose=FALSE){
+#   edge.inds<-rownames(x)
+#   tree.inds<-colnames(x)
+#   ntrees<-length(tree.inds)
+#   sims.per.tree<-unlist(lapply(x[1,],function(ii) dim(ii)[3]),use.names=FALSE)
+#   nsims<-sum(sims.per.tree)
+#   states<-colnames(Xsig2)
+#   sum.obs<-matrix(unlist(lapply(parsed.obs,sum),use.names=FALSE),
+#                   nrow(parsed.obs),ncol(parsed.obs))
+#   
+#   #figure these guys out later...
+#   # if(!is.null(mu.mods)){
+#   #   mu.dims<-which(lengths(mu.mods)>0)
+#   #   base<-rep(FALSE,ntraits)
+#   #   foo<-function(i){
+#   #     base[i]<-TRUE
+#   #     base
+#   #   }
+#   #   mu.inds<-rep(list(NULL),ntraits)
+#   #   mu.inds[mu.dims]<-lapply(mu.dims,foo)
+#   # }
+#   # if(!is.null(Xsig2.mods)){
+#   #   Xsig2.dims<-which(lengths(Xsig2.mods)>0)
+#   #   base<-matrix(FALSE,ntraits,ntraits)
+#   #   foo1<-function(i){
+#   #     base[i,]<-TRUE
+#   #     base
+#   #   }
+#   #   foo2<-function(i){
+#   #     base[,i]<-TRUE
+#   #     base
+#   #   }
+#   #   Xsig2.inds2<-Xsig2.inds1<-rep(list(NULL),ntraits)
+#   #   Xsig2.inds1[Xsig2.dims]<-lapply(Xsig2.dims,foo1)
+#   #   Xsig2.inds2[Xsig2.dims]<-lapply(Xsig2.dims,foo2)
+#   # }
+#   
+#   get.pars<-function(){
+#     lookup[[t]][['table']]
+#   }
+#   get.nsim<-function(){
+#     sims.per.tree[t]
+#   }
+#   get.matches<-function(){
+#     lookup[[t]][['matches']]
+#   }
+#   get.obs.p<-function(){
+#     tmp<-nobs[e,tmp.pars[,1]]/unlist(Ysig2[tmp.pars[,3],e],use.names=FALSE)
+#     tmp[is.nan(tmp)]<-0
+#     tmp
+#   }
+#   get.obs.x<-function(){
+#     
+#   }
+#   
+#   get.obs.v<-function(){
+#     unlist(Ysig2[tmp.pars[,3],e],use.names=FALSE)
+#   }
+#   get.exact.inds<-function(){
+#     tmp.obs.v==0
+#   }
+#   get.obs.p<-function(){
+#     tmp<-nobs[e,tmp.pars[,1]]/unlist(Ysig2[tmp.pars[,3],e],use.names=FALSE)
+#     tmp[is.nan(tmp)]<-0
+#     tmp
+#   }
+#   get.obs.x<-function(){
+#     infs<-is.infinite(tmp)
+#     tmp[infs]<-nobs[e,]
+#     tmp.obs.v[tmp.exact.inds]<-1
+#     sum.obs[e,tmp.pars[,1]]/tmp.obs.v
+#   }
+#   
+#   get.x<-function(){
+#     out<-
+#     out<-lapply(des[[e]],function(ee) matrix(x[[ee,t]][t1s[ee,t],,tmp.inds,drop=FALSE]-dx[[ee,t]][1,,tmp.inds,drop=FALSE],
+#                                              ntraits,tmp.nsim))
+#     if(!is.null(tmp.x)){
+#       out<-c(out,split(tmp.x,seq_len(tmp.nobs)))
+#     }
+#     out
+#   }
+#   get.p<-function(){
+#     out<-lapply(des[[e]],function(ee) .solve(array(v[[ee,t]][,,1,tmp.inds,drop=FALSE]+dv[[ee,t]][,,1,tmp.inds,drop=FALSE],
+#                                                    c(ntraits,ntraits,tmp.nsim)),
+#                                              tmp.nsim,ntraits,diag.inds))
+#     if(!is.null(tmp.p)){
+#       out<-c(out,split(tmp.p,rep(seq_len(tmp.nobs),each=ntraits^2)))
+#     }
+#     out
+#   }
+#   
+#   for(e in prune.seq){
+#     not.root<-e>1
+#     tmp.ndes<-ndes[e]
+#     tmp.has.des<-tmp.ndes>0
+#     for(t in seq_len(ntrees)){
+#       tmp.pars<-get.pars()
+#       tmp.nsim<-get.nsim()
+#       tmp.matches<-get.matches()
+#       tmp.obs.v<-get.obs.v()
+#       tmp.exact.inds<-get.exact.inds()
+#       tmp.x<-get.obs.x()[tmp.matches]
+#       tmp.p<-get.obs.p()[tmp.matches]
+#       tmp.exact.inds<-tmp.exact.inds[tmp.matches]
+#       if(tmp.has.des){
+#         for(ee in des[[e]]){
+#           
+#         }
+#       }
+#       if(tmp.nobs>0){
+#         tmp.x<-get.obs.x()
+#         tmp.p<-get.obs.p()
+#       }
+#       if(tmp.ndes>0){
+#         tmp.x<-get.x()
+#         tmp.p<-get.p()
+#         v[[e,t]][,,NTS[e,t],tmp.inds]<-calc.v()
+#         x[[e,t]][nts[e,t],,tmp.inds]<-calc.x()
+#       }else if(tmp.nobs>0){
+#         v[[e,t]][,,NTS[e,t],tmp.inds]<-calc.obs.v()
+#         x[[e,t]][nts[e,t],,tmp.inds]<-calc.obs.x()
+#       }
+#       if(not.root){
+#         tmp.look<-get.look()
+#         tmp.maps<-get.maps()
+#         for(k in get.NTS():1){
+#           tmp.tpts<-get.tpts()
+#           tmp.dts<-get.dts()
+#           tmp.nts<-length(tmp.tpts)
+#           dx[[e,t]][k,,]<-get.dx()
+#           dv[[e,t]][,,k,]<-get.dv()
+#           if(k>1){
+#             x[[e,t]][tmp.maps[['inds']][k-1],,]<-update.x()
+#             v[[e,t]][,,k-1,]<-update.v()
+#           }
+#         }
+#       }
+#     }
+#   }
+# }

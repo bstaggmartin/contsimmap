@@ -817,7 +817,7 @@
                   nrow(l),1)
       message<-paste0("; missing ",type,"'s filled in with ",
                       if(type=='Ysig2'|type=='mu') "0 " else "identity ",
-                      if(type=='mu') "matrices" else "vectors")
+                      if(type=='mu') "vectors" else "matrices")
     }
     out[,prob.states]<-tmp[,rep(seq_len(ncol(tmp)),length.out=sum(prob.states))]
     if(!quiet.flag){
@@ -909,6 +909,22 @@
   out
 }
 
+.contsimmap2treeinfo<-function(contsimmap){
+  tree<-attr(contsimmap,'tree')
+  tree1<-tree[[1]]
+  list(tree=tree,
+       treeID=.get.treeID(contsimmap),
+       ntrees=length(tree),
+       nodes=tree1[['node.label']],
+       nnodes=tree1[['Nnode']],
+       edges=tree1[['edge']],
+       nedges=nrow(tree1[['edge']]),
+       tips=tree1[['tip.label']],
+       ntips=length(tree1[['tip.label']]),
+       states=colnames(tree1[['mapped.edge']]),
+       nstates=ncol(tree1[['mapped.edge']]))
+}
+
 #can I reuse this for prep conthistory?
 #looks that way
 .prep.contsimmap<-function(tree,nsims,res,
@@ -918,19 +934,7 @@
                            diffusion=FALSE){
   
   if(diffusion){
-    tt<-attr(tree,'tree')
-    tt1<-tt[[1]]
-    tree.info<-list(tree=tt,
-                    treeID=.get.treeID(tree),
-                    ntrees=length(tt),
-                    nodes=tt1[['node.label']],
-                    nnodes=tt1[['Nnode']],
-                    edges=tt1[['edge']],
-                    nedges=nrow(tt1[['edge']]),
-                    tips=tt1[['tip.label']],
-                    ntips=length(tt1[['tip.label']]),
-                    states=colnames(tt1[['mapped.edge']]),
-                    nstates=ncol(tt1[['mapped.edge']]))
+    tree.info<-.contsimmap2treeinfo(tree)
   }else{
     ####INITIAL INFO EXTRACTION####
     #outputs...
@@ -998,6 +1002,7 @@
                      conditional)
   
   c(tree.info[c('tree','treeID')],
+    Yperm=list(c(length(tree.info[["tips"]])+1,tree.info[["edges"]][,2])), #so Ysig2 can be rearranged into edgewise format
     topo.info[c('anc','des','prune.seq')], #technically don't need des/ndes for unconditional version...
     ndes=list(lengths(topo.info[['des']])),
     edge.info,

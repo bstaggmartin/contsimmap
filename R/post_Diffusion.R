@@ -174,14 +174,14 @@ diffusion<-function(...,Xsig2=NULL,Ysig2=NULL,mu=NULL,
     #yeah, definitely might be beneficial to have some univariate shortcut and/or a verbose setting to at least see progress...
     tmp<-.cond.traversals(prune.seq,anc,des,ndes,
                           maps,
-                          parsed.obs,parsed.mis,nobs,Xsig2,Ysig2,mu,lookup,
+                          parsed.obs,parsed.mis,nobs,Xsig2,Ysig2[,Yperm,drop=FALSE],mu,lookup,
                           nts,NTS,t1s,seed,x,v,dx,dv,
                           Xsig2.mods,mu.mods,
                           verbose=verbose) #rather slow, but whatcha gonna do?
   }else{
     tmp<-.uncond.traversals(prune.seq,anc,tree[[1]][['edge']],Ntip(tree[[1]]),
                             maps,
-                            X0,nobs,Xsig2,Ysig2,mu,lookup,
+                            X0,nobs,Xsig2,Ysig2[,Yperm,drop=FALSE],mu,lookup,
                             nts,seed,
                             Xsig2.mods,mu.mods,
                             verbose=verbose)

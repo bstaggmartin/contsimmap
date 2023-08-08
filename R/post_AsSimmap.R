@@ -118,10 +118,10 @@ as.simmap<-function(contsimmap,trait=1,...){
   #form mapped.edge
   edges<-(splits-1)%%Nedge(contsimmap)+1
   sims<-(splits-1)%/%Nedge(contsimmap)+1
-  mapped.edge<-tapply(maps,list(edges,names(maps),sims),sum)
+  mapped.edge<-tapply(maps,list(edges,factor(names(maps),levels=nms),sims),sum)
   mapped.edge[is.na(mapped.edge)]<-0
   edge.mat<-attr(contsimmap,'tree')[[1]][['edge']]
-  dimnms<-list(paste0(edge.mat[,1],edge.mat[,2],sep=","),nms)
+  dimnms<-list(paste(edge.mat[,1],edge.mat[,2],sep=","),nms)
   #form node.states
   inds<-c(splits[-1]!=splits[-length(splits)],TRUE)
   node.states<-matrix(names(maps)[inds],Nedge(contsimmap),dim(contsimmap)[3])

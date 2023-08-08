@@ -1,8 +1,9 @@
 #still have some work to do--need to update indexing/plotting/make.traits function to account for
 #the weird ways states get processed, as well as the different style of simulation naming!
+#3/10/23: the above is mostly done as far as I know, but I may have missed something
 
 #' @export
-summarize.traits<-function(contsimmap,traits=NULL,FUN,...){
+summarize.traits<-function(contsimmap,traits=NULL,FUN="mean",...){
   if(!is.null(traits)){
     contsimmap<-contsimmap[,traits,]
   }
@@ -24,7 +25,7 @@ summarize.traits<-function(contsimmap,traits=NULL,FUN,...){
   new.dim3<-dim(res)[3]
   if(is.null(dimnames(res)[[3]])){
     tmp<-if(is.character(FUN)) FUN else deparse(substitute(FUN))
-    dimnames(res)[[3]]<-paste0(tmp,seq_len(new.dim3))
+    dimnames(res)[[3]]<-paste0(tmp,if(new.dim3>1) seq_len(new.dim3) else "")
   }
   out<-unclass(contsimmap)[,,seq_len(new.dim3),drop=FALSE]
   tmp.seq<-seq_len(dims[1]*dims[2]*new.dim3)

@@ -27,7 +27,7 @@
 \item{traits}{A character/numeric vector specifying which traits within \code{contsimmap} to plot. Specifying a single trait results in a
 "phenogram"-style plot with the x-axis corresponding to time; specifying multiple traits results in a "phylomorphospace"-style plot with the
 first two traits corresponding to the x and y-axes, respectively. Additional traits are ignored for now, though a \code{pairs()} or 3D plotting
-method may implemented in the future. Also, \code{NA} traits are not yet supported and could break the function spectacularly.}
+method may implemented in the future. Also, \code{NA} traits are \emph{not yet supported and could break the function spectacularly}.}
 
 \item{sims}{A character/numeric vector specifying which simulations within \code{contsimmap} to plot. Set to \code{NULL} to plot all
 simulations. \code{NA} simulations are not yet supported and could break the function spectacularly.}
@@ -86,5 +86,5 @@ argument passed to \code{...}) be reversed? For example, if \code{Layer.by = "ti
 Nothing for now--just makes a plot!
 }
 \description{
-This function runs the default plotting method for continuous stochastic character map (class "\code{contsimmap}") objects.
+This function runs the default plotting method for continuous stochastic character maps (class "\code{contsimmap}").
 }

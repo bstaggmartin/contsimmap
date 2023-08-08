@@ -263,7 +263,7 @@
 ####EXTRACTION####
 
 .phy.method.contsimmap<-function(FUN,contsimmap,...){
-  do.call(FUN,c(attr(contsimmap,'tree')[1],...))
+  do.call(FUN,c(list(attr(contsimmap,'tree')[[1]]),...))
 }
 
 #' @export
@@ -375,7 +375,9 @@ print.contsimmap<-function(contsimmap,printlen=6,...){
 }
 
 #' @export
-summary.contsimmap<-function(contsimmap,printlen=6,nrows=printlen,ncols=printlen,nslices=printlen,...){
+summary.contsimmap<-function(contsimmap,printlen=6,
+                             params=c("Xsig2","Ysig2","mu","trait.data","nobs"),
+                             nrows=10,ncols=printlen,nslices=2,...){
   flag<-print(contsimmap,printlen=printlen)
   report.tree<-if(dim(contsimmap)[3]==1) 'Tree has' else 'Trees have'
   tree<-attr(contsimmap,'tree')[[1]]
@@ -394,53 +396,74 @@ summary.contsimmap<-function(contsimmap,printlen=6,nrows=printlen,ncols=printlen
     nodes<-tree[['node.label']][nodes[nodes>Ntip(contsimmap)]-Ntip(contsimmap)]
     cat('\t[ subsetted to',if(length(nodes)) .report.names(nms=nodes,printlen=printlen) else ' no nodes ',']',sep='')
   }
-  
-  # 
-  # 
-  # 
-  # if(!is.null(contsimmap[['trait.data']])){
-  #   cat('\nIncludes trait data:\n\n')
-  #   dat<-contsimmap[['trait.data']]
-  #   dims<-dim(dat)
-  #   report.dat<-head(contsimmap[['trait.data']],c(nrows,ncols,nslices))
-  #   report.dims<-dim(report.dat)
-  #   nmiss<-dims-report.dims
-  #   message<-vector('character',3)
-  #   for(i in seq_len(3)){
-  #     if(nmiss[i]){
-  #       if(i==1){
-  #         message[i]<-paste(nmiss[i],
-  #                           if(nmiss[i]==1) 'row' else 'rows')
-  #       }else if(i==2){
-  #         message[i]<-paste(nmiss[i],
-  #                           if(nmiss[i]==1) 'column' else 'columns')
-  #       }else{
-  #         message[i]<-paste(nmiss[i],
-  #                           if(nmiss[i]==1) 'matrix slice' else 'matrix slices')
-  #       }
-  #     }
-  #   }
-  #   print(report.dat,...)
-  #   check<-nzchar(message)
-  #   if(any(check)){
-  #     message<-.report.names(nms=message[check])
-  #     cat('\n[ omitted',message,']\n',sep='')
-  #   }
-  # }
-  # Xsig2<-attr(contsimmap,'params')[['Xsig2',1]]
-  # nstates<-ncol(Xsig2)
-  # if(nstates>1){
-  #   cat('\nIncludes discrete characters:\n  ',
-  #       .report.names(nms=names(Xsig2),printlen=printlen),
-  #       '\n\nWith rate matrices:\n\n',sep='')
-  #   if(nstates>printlen){
-  #     print(Xsig2[seq_len(printlen)],...)
-  #     cat('\n...\n')
-  #   }else{
-  #     print(Xsig2,...)
-  #   }
-  # }else{
-  #   cat('\nRate matrix:\n')
-  #   print(unname(Xsig2),...)
-  # }
+  states<-.get.states(attr(contsimmap,"tree"))
+  if(length(states)>1){
+    cat("\n\nIncludes ",length(states)," mapped discrete character states:\n ",sep='',
+        .report.nms(nms=states,printlen=printlen))
+  }
+  if(!is.null(params)){
+    cat("\n\nParameter information:\n")
+    get.param.info(contsimmap,printlen=printlen,
+                   params=params,
+                   nrows=nrows,ncols=ncols,nslices=nslices)
+  }
 }
+
+#make it so that rows apply to within list element rows/columns for Xsig2/Ysig2/mu
+#and cols applys to number of states represented!
+#but system as a whole seems to be working well
+#need to also print out modifications of parameter values
+get.param.info<-function(contsimmap,traits=NULL,sims=NULL,printlen=6,
+                         params=c("Xsig2","Ysig2","mu","trait.data","nobs"),
+                         nrows=10,ncols=printlen,nslices=2,...){
+  contsimmap<-contsimmap[traits,sims,edges]
+  if(!is.numeric(params)){
+    params<-pmatch(params,c("Xsig2","Ysig2","mu","trait.data","nobs"))
+  }
+  params<-params[!is.na(params)]
+  params<-c("Xsig2","Ysig2","mu","trait.data","nobs")[params]
+  tab<-attr(contsimmap,"params")
+  inds<-attr(contsimmap,"traits")
+  inds<-sort(inds)
+  trait.nms<-split(names(inds),inds)
+  inds<-unique(inds)
+  tree.nms<-dimnames(contsimmap)[[3]]
+  for(i in params){
+    tmp<-if(i=="nobs") tab["trait.data",] else tab[i,]
+    lens<-lengths(tmp)
+    if(any(lens>0)){
+      cat(switch(i,
+                 Xsig2="Evolutionary rates/covariances (Xsig2):",
+                 Ysig2="Within-tip (co)variances (Ysig2):",
+                 mu="Evolutionary trends (mu):",
+                 trait.data="trait data (trait.data):",
+                 nobs="Numbers of observations per node (nobs):"))
+      for(j in inds){
+        if(lens[j]>0){
+          cat("\n\n\tFor ",.report.names(c("trait","traits"),trait.nms[j],printlen=printlen),":",sep='')
+          if(i=="nobs"){
+            tmp.nms<-c(attr(contsimmap,"tree")[[1]][["tip.label"]],attr(contsimmap,"tree")[[1]][["node.label"]])
+            out<-do.call(cbind,lapply(tmp[[j]],function(ii) tapply(rownames(ii),rownames(ii),length)[tmp.nms]))
+            out<-out[,tab[["lookup",j]][,1],drop=FALSE]
+            colnames(out)<-tree.nms
+            rownames(out)<-tmp.nms
+          }else{
+            tmp.look<-tab[["lookup",j]][,switch(i,Xsig2=2,Ysig2=3,mu=4,trait.data=1),drop=FALSE]
+            if(length(dim(tmp[[j]]))==2){
+              out<-tmp[[j]][tmp.look,,drop=FALSE]
+              rownames(out)<-tree.nms
+            }else{
+              out<-tmp[[j]][tmp.look,drop=FALSE]
+              names(out)<-tree.nms
+            }
+          }
+          .nice.array.print(out,
+                            i,nrows,if(i=="nobs") nslices else ncols,nslices)
+          cat("\n\n")
+        }
+      }
+    }
+  }
+}
+
+

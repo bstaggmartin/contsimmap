@@ -251,13 +251,13 @@
 
 #' Plot continuous stochastic character maps
 #'
-#' This function runs the default plotting method for continuous stochastic character map (class "\code{contsimmap}") objects.
+#' This function runs the default plotting method for continuous stochastic character maps (class "\code{contsimmap}").
 #'
 #' @param contsimmap An object of class "\code{contsimmap}".
 #' @param traits A character/numeric vector specifying which traits within \code{contsimmap} to plot. Specifying a single trait results in a
 #' "phenogram"-style plot with the x-axis corresponding to time; specifying multiple traits results in a "phylomorphospace"-style plot with the
 #' first two traits corresponding to the x and y-axes, respectively. Additional traits are ignored for now, though a \code{pairs()} or 3D plotting
-#' method may implemented in the future. Also, \code{NA} traits are not yet supported and could break the function spectacularly.
+#' method may implemented in the future. Also, \code{NA} traits are \emph{not yet supported and could break the function spectacularly}.
 #' @param sims A character/numeric vector specifying which simulations within \code{contsimmap} to plot. Set to \code{NULL} to plot all
 #' simulations. \code{NA} simulations are not yet supported and could break the function spectacularly.
 #' @param edges A character/numeric vector specifying which edges within \code{contsimmap} to plot. Set to \code{NULL} to plot all edges.
