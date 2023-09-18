@@ -27,6 +27,16 @@
 # less than 0, NA, or inf values now result in -Inf likelihoods
 # Also now round values less than a new argument, vartol, to 0--I think this is mainly what was causing "runaway" likelihoods...
 # You could get values as low as ~5e-324 (e^-746ish) otherwise, at least on your machine, which was probably really fucking with things
+#9/7 update:
+#wow! Been a while, lots of changes
+#Yeah, implementing vartol seemed to fix the runaway likelihoods--I don't see them anymore
+#There was a math error with how likelihoods were weighted under the nuisance prior (downweighted because I added nuisance weighting ON TOP OF averaging)
+# now fixed!
+#Added option to do nuisance priors over root as well
+#Working on implementing a way to subset which trees to calculate likelihoods for--annoying, but it will allow for (relatively) fast gradient calculations
+# (because most of the likelihood at a point is conditional on just a few contsimmaps)
+# I'm currently at the point where the function only calculates necessary mapped xvars/yvars/mus and returns them in smaller arrays
+# still have to work out mechanisms to update other indexing to reflect the rearrangement of tree indices implied by this procedure...
 
 
 
@@ -40,7 +50,7 @@ make.lik.fun<-function(tree,trait.data,
                        root.nuisance.prior=FALSE,
                        wgt.by.nobs=TRUE,
                        tree.nuisance.prior=FALSE,
-                       vartol=1e-10,
+                       vartol=1e-10,experimental.truncation=FALSE,
                        ...){
   
   ####INITIAL INPUT PROCESSING####
@@ -114,6 +124,12 @@ make.lik.fun<-function(tree,trait.data,
   #just store that the unlisted trait as normal
   #BUT also store the indices that need to be grabbed for any particular formula...
   #Then modify formulae by adding [[indices]] to the end!
+  
+  #Yvar seems pointlessly complicated--why store a matrix for each node? Just store a vector!
+  #Need to look into this more--there might be a reason you went for this approach, but I think it was just convenience...
+  #Will simplify things a bit for bringing in tree indexing in likelihood function
+  #NEVER MIND! Keep in mind j refers to formulae, and formulae can refer to multiple states/nodes...
+  
   tmp<-list(Xvar,Xcor,Mu,Yvar,Ycor)
   inds<-setNames(lapply(tmp,attr,"inds"),
                  c("Xvar","Xcor","mu","Yvar","Ycor"))
@@ -121,7 +137,7 @@ make.lik.fun<-function(tree,trait.data,
     if(is.call(jj)) all.vars(jj) else lapply(jj,all.vars))) #had to modify to prevent treating make.cor as variable
   par.nms<-unique(unlist(vars.per.formula,use.names=FALSE))
   conmaps<-list()
-  conmaps[["RES_mapped_mu"]]<-rep(list(rep(FALSE,ntraits)),length(mu))
+  conmaps[["RES_mapped_mu"]]<-rep(list(rep(FALSE,ntraits)),length(Mu))
   conmaps[["RES_mapped_xvar"]]<-rep(list(rep(FALSE,ntraits)),length(Xvar))
   conmaps[["RES_mapped_yvar"]]<-rep(list(rep(FALSE,ntraits)),length(Yvar))
   conrefs<-par.nms%in%contsimmap.traits
@@ -151,9 +167,13 @@ make.lik.fun<-function(tree,trait.data,
     }
     nts<-rbind(1,.get.ns(tree))[,tree.info[["treeID"]]]
     has.des<-lapply(seq_len(ntraits),function(ii) rep(has.des[ii,,,drop=FALSE],nts))
+    trees<-rep(seq_along(tree.info[["treeID"]]),colSums(nts))
+    conmaps[["RES_trees"]]<-trees
     
     #setting up conmaps list...
-    conmaps[["RES_nodes_inds"]]<-cumsum(nts)
+    tmp.endpts<-cumsum(nts)
+    conmaps[["RES_nodes_trees"]]<-trees[tmp.endpts]
+    conmaps[["RES_nodes_inds"]]<-tmp.endpts
     tmp.seq<-seq_along(nts)
     conmaps[["RES_splits"]]<-factor(rep(tmp.seq,nts),levels=tmp.seq)
     len.conmaps<-length(conmaps[["RES_splits"]])
@@ -442,16 +462,24 @@ make.lik.fun<-function(tree,trait.data,
       }
     }
   }
-  calc.mus<-function(env){
+  calc.mus<-function(env,tree.flag,nsim){
     for(i in seq_along(Mu)){
       for(j in seq_len(ntraits)){
+        if(tree.flag){
+          env[[paste0("RES_mu_",i,"_",j,"_inds")]]<-
+            env[[paste0("RES_mu_",i,"_",j,"_inds")]]&env[["RES_trees"]]
+        }
         tmp<-calc.mu(Mu[[i]][[j]],env)
         if(is.null(tmp)){
           return(NULL)
         }else{
           if(env[["RES_mapped_mu"]][[i]][j]){
             Mu[[i]][[j]]<-env[["RES_mu_holder"]]
-            Mu[[i]][[j]][env[[paste0("RES_mu_",i,"_",j,"_inds")]]]<-tmp
+            if(tree.flag){
+              Mu[[i]][[j]][env[[paste0("RES_mu_",i,"_",j,"_inds")]][env[["RES_trees"]]]]<-tmp
+            }else{
+              Mu[[i]][[j]][env[[paste0("RES_mu_",i,"_",j,"_inds")]]]<-tmp
+            }
             Mu[[i]][[j]]<-matrix(split(Mu[[i]][[j]],env[["RES_splits"]]),nedges,nsim)
           }else{
             Mu[[i]][[j]]<-tmp
@@ -461,16 +489,24 @@ make.lik.fun<-function(tree,trait.data,
     }
     Mu
   }
-  calc.yvars<-function(env){
+  calc.yvars<-function(env,tree.flag){
     for(i in seq_along(Yvar)){
       for(j in seq_len(ntraits)){
+        if(tree.flag){
+          env[[paste0("RES_Yvar_",i,"_",j,"_inds")]]<-
+            env[[paste0("RES_Yvar_",i,"_",j,"_inds")]]&env[["RES_nodes_trees"]]
+        }
         tmp<-calc.yvar(Yvar[[i]][[j]],env)
         if(is.null(tmp)){
           return(NULL)
         }else{
           if(env[["RES_mapped_yvar"]][[i]][j]){
             Yvar[[i]][[j]]<-env[["RES_yvar_holder"]]
-            Yvar[[i]][[j]][env[[paste0("RES_Yvar_",i,"_",j,"_inds")]]]<-tmp
+            if(tree.flag){
+              Yvar[[i]][[j]][env[[paste0("RES_Yvar_",i,"_",j,"_inds")]][env[["RES_nodes_trees"]]]]<-tmp
+            }else{
+              Yvar[[i]][[j]][env[[paste0("RES_Yvar_",i,"_",j,"_inds")]]]<-tmp
+            }
           }else{
             Yvar[[i]][[j]]<-tmp
           }
@@ -481,16 +517,24 @@ make.lik.fun<-function(tree,trait.data,
   }
   #could potentially do smarter splits based by reorganizing simulation to be in a better order...
   #but I'm not gonna worry about it for now
-  calc.xvars<-function(env){
+  calc.xvars<-function(env,tree.flag,nsim){
     for(i in seq_along(Xvar)){
       for(j in seq_len(ntraits)){
+        if(tree.flag){
+          env[[paste0("RES_Xvar_",i,"_",j,"_inds")]]<-
+            env[[paste0("RES_Xvar_",i,"_",j,"_inds")]]&env[["RES_trees"]]
+        }
         tmp<-calc.xvar(Xvar[[i]][[j]],env)
         if(is.null(tmp)){
           return(NULL)
         }else{
           if(env[["RES_mapped_xvar"]][[i]][j]){
             Xvar[[i]][[j]]<-env[["RES_xvar_holder"]]
-            Xvar[[i]][[j]][env[[paste0("RES_Xvar_",i,"_",j,"_inds")]]]<-tmp
+            if(tree.flag){
+              Xvar[[i]][[j]][env[[paste0("RES_Xvar_",i,"_",j,"_inds")]][env[["RES_trees"]]]]<-tmp
+            }else{
+              Xvar[[i]][[j]][env[[paste0("RES_Xvar_",i,"_",j,"_inds")]]]<-tmp
+            }
             Xvar[[i]][[j]]<-matrix(split(Xvar[[i]][[j]],env[["RES_splits"]]),nedges,nsim)
           }else{
             Xvar[[i]][[j]]<-tmp
@@ -684,7 +728,9 @@ make.lik.fun<-function(tree,trait.data,
     #calculates V as well as sums PZ and associated scalars for a given edge
     #(also adds determinant of V and dimensional correction to associated scalars)
     des.inf.holder<-matrix(FALSE,ntraits,nsim)
-    calc.all<-function(e,xvar,yvar,cors,mu,VV,ZZ,RR,double.RR){
+    calc.all<-function(e,xvar,yvar,cors,mu,VV,ZZ,RR,double.RR,
+                       traitID.inds,treeID.inds,sims.per.traitID,sims.per.treeID,traitID.seq,treeID.seq,nsim,
+                       RR.holder,PZ.holder,VV.holder,des.inf.holder){
       #need to actually start keeping track of infinite precisions (aka 0 variances) here!
       #I think this all works, but hard to tell--basically just keeps track of variance-covariance matrices with 0 along diagonal
       #Then uses this information in get.obs() below (but importantly avoids counting observations as infinite)
@@ -941,7 +987,9 @@ make.lik.fun<-function(tree,trait.data,
     }
     #could better simplify the observation code system in the case of 1 trait...
     des.inf.holder<-logical(nsim)
-    calc.all<-function(e,xvar,yvar,cors,mu,VV,ZZ,RR,double.RR){
+    calc.all<-function(e,xvar,yvar,cors,mu,VV,ZZ,RR,double.RR,
+                       traitID.inds,treeID.inds,sims.per.traitID,sims.per.treeID,traitID.seq,treeID.seq,nsim,
+                       RR.holder,PZ.holder,VV.holder,des.inf.holder){
       #need to do descendants first (good checkpoint for infinite precisions)
       if(has.des[e]){
         des.list<-rep(list(list(VV.holder,PZ.holder,des.inf.holder)),ndes[e])
@@ -1125,46 +1173,157 @@ make.lik.fun<-function(tree,trait.data,
   
   ####FINAL FUNCTION TO OUTPUT####
   
-  out<-function(par){
-    if(length(par)==length(par.nms)){
-      env<-c(as.list(setNames(par,par.nms)),conmaps)
-      xvar<-calc.xvars(env)
-      if(is.null(xvar)) return(-Inf)
-      yvar<-calc.yvars(env)
-      if(is.null(yvar)) return(-Inf)
+  int.out<-function(par,tree.inds=NULL){
+    #calculate tree indices
+    if(!is.null(tree.inds)&conmaps.flag){
+      tree.flag<-TRUE
+      
+      #correct mapping of contsimmapped variables
+      nsim<-length(tree.inds)
+      wgts<-wgts[tree.inds]
+      conmaps[["RES_trees"]]<-conmaps[["RES_trees"]]%in%tree.inds
+      conmaps[["RES_nodes_trees"]]<-conmaps[["RES_nodes_trees"]]%in%tree.inds
+      conmaps[["RES_splits"]]<-conmaps[["RES_splits"]][conmaps[["RES_trees"]]]
+      conmaps[["RES_splits"]]<-factor(conmaps[["RES_splits"]],levels=which(tabulate(as.numeric(conmaps[["RES_splits"]]))>0))
+      if(any(unlist(conmaps[["RES_mapped_mu"]],use.names=FALSE))){
+        conmaps[["RES_mu_holder"]]<-conmaps[["RES_mu_holder"]][conmaps[["RES_trees"]]]
+      }
+      if(any(unlist(conmaps[["RES_mapped_yvar"]],use.names=FALSE))){
+        conmaps[["RES_yvar_holder"]]<-matrix(conmaps[["RES_yvar_holder"]][conmaps[["RES_nodes_trees"]]],nedges,nsim)
+      }
+      if(any(unlist(conmaps[["RES_mapped_xvar"]],use.names=FALSE))){
+        conmaps[["RES_xvar_holder"]]<-conmaps[["RES_xvar_holder"]][conmaps[["RES_trees"]]]
+      }
+      
+      #correct indexing of tree/traitIDs
+      #better idea--just change traitID.seq and treeID.seq--I think this should work, actually!
+      #just need to update the indices and nsims per accordingly...
+      traitID.inds<-lapply(traitID.inds,'[',tree.inds)
+      treeID.inds<-lapply(treeID.inds,'[',tree.inds)
+      sims.per.traitID<-unlist(lapply(treeID.inds,sum),use.names=FALSE)
+      sims.per.treeID<-unlist(lapply(treeID.inds,sum),use.names=FALSE)
+      traitID.seq<-which(sims.per.traitID>0)
+      treeID.seq<-which(sims.per.treeID>0)
+      
+      #correct sizes of containers
+      RR.holder<-numeric(nsim)
+      RR<-rep(list(RR.holder),nedges)
       if(mult.traits){
-        cors<-calc.cors(env)
-        if(is.null(cors)) return(-Inf)
+        PZ.holder<-matrix(0,ntraits,nsim)
+        ZZ<-rep(list(PZ.holder),nedges)
+        VV.holder<-array(0,c(ntraits,ntraits,nsim))
+        VV<-rep(list(VV.holder),nedges)
+        des.inf.holder<-matrix(FALSE,ntraits,nsim)
       }else{
-        cors<-NULL
+        VV.holder<-PZ.holder<-RR.holder
+        VV<-ZZ<-RR
+        des.inf.holder<-logical(nsim)
       }
-      mu<-calc.mus(env)
-      for(e in prune.seq){
-        tmp<-calc.all(e,xvar,yvar,cors,mu,VV,ZZ,RR,root.nuisance.prior&e==1)
-        if(is.null(tmp)) return(-Inf)
-        VV[[e]]<-tmp[[1]]
-        ZZ[[e]]<-tmp[[2]]
-        RR[[e]]<-tmp[[3]]
-        if(mult.traits) cors[[2]]<-tmp[[4]]
-      }
-      LL<-wgts+RR[[1]]
-      max.LL<-max(LL)
-      LL<-exp(LL-max.LL)
-      if(tree.nuisance.prior){
-        out<-log(sum(LL^2))-log(sum(LL))+max.LL
+      
+    }else{
+      tree.flag<-FALSE
+    }
+    env<-c(as.list(setNames(par,par.nms)),conmaps)
+    xvar<-calc.xvars(env,tree.flag,nsim)
+    if(is.null(xvar)) return(-Inf)
+    yvar<-calc.yvars(env,tree.flag)
+    if(is.null(yvar)) return(-Inf)
+    if(mult.traits){
+      cors<-calc.cors(env)
+      if(is.null(cors)) return(-Inf)
+    }else{
+      cors<-NULL
+    }
+    mu<-calc.mus(env,tree.flag,nsim)
+    for(e in prune.seq){
+      tmp<-calc.all(e,xvar,yvar,cors,mu,VV,ZZ,RR,root.nuisance.prior&e==1,
+                    traitID.inds,treeID.inds,sims.per.traitID,sims.per.treeID,traitID.seq,treeID.seq,nsim,
+                    RR.holder,PZ.holder,VV.holder,des.inf.holder)
+      if(is.null(tmp)) return(-Inf)
+      VV[[e]]<-tmp[[1]]
+      ZZ[[e]]<-tmp[[2]]
+      RR[[e]]<-tmp[[3]]
+      if(mult.traits) cors[[2]]<-tmp[[4]]
+    }
+    LL<-wgts+RR[[1]]
+    max.LL<-max(LL)
+    LL<-exp(LL-max.LL)
+    if(experimental.truncation){
+      tmp.thresh<-sum(LL)/nsim
+      LL[LL>tmp.thresh]<-tmp.thresh
+    }
+    if(tree.nuisance.prior){
+      log.sum.LL<-log(sum(LL))
+      LL<-LL^2
+      out.lik<-log(sum(LL))-log.sum.LL+max.LL
+    }else{
+      out.lik<-log(sum(LL))-log(nsim)+max.LL
+    }
+    if(is.na(out.lik)){
+      -Inf
+    }else{
+      attr(out.lik,"LL")<-LL
+      out.lik
+    }
+  }
+  
+  npar<-length(par.nms)
+  gg<-numeric(npar)
+  out<-function(par,
+                grad=FALSE,grad.qual=0.9,grad.step=(.Machine$double.eps)^(1/3),
+                invert=FALSE){
+    if(length(par)==npar){
+      lik<-tryCatch(int.out(par),error=function(e) -Inf)
+      if(invert) lik<- -lik
+      if(grad){
+        if(is.infinite(lik)){
+          #probably a terrible idea...but oh well :/
+          gg<-rnorm(npar)
+        }else{
+          LL<-attr(lik,"LL")
+          LL<-LL/sum(LL)
+          ord<-order(LL,decreasing=TRUE)
+          #trees that contribute to 90% of likelihood!
+          #might even be able to get away with 50%...
+          #1.5 is just a random guess as to an appropriate sample size in this situation...
+          #2 seems safer
+          tmp.size<-min(sum(LL>0),round(grad.qual*nsim),2*min(which(cumsum(LL[ord])>grad.qual)))
+          inds<-sort.int(sample.int(nsim,tmp.size,prob=LL))
+          cur<-tryCatch(int.out(par,inds),error=function(e) -Inf)
+          #random gradients upon errors didn't seem awful...so I think I'll just do that from now on
+          if(is.infinite(cur)){
+            gg<-c(-0.1,0.1)[rbinom(npar,1,0.5)+1]
+          }else{
+            hh<-rep(grad.step,npar)
+            tmp.inds<-abs(par)>1
+            hh[tmp.inds]<-hh[tmp.inds]*abs(par[tmp.inds])
+            pp<-par
+            for(i in seq_along(par)){
+              pp[i]<-par[i]+hh[i]/2
+              fw<-tryCatch(int.out(pp,inds),error=function(e) -Inf)
+              fw.inf<-is.infinite(fw)
+              pp[i]<-par[i]-hh[i]/2
+              bw<-tryCatch(int.out(pp,inds),error=function(e) -Inf)
+              bw.inf<-is.infinite(bw)
+              if(fw.inf&bw.inf){
+                gg[i]<-c(-0.1,0.1)[rbinom(1,1,0.5)+1]
+              }else{
+                if(fw.inf){
+                  gg[i]<-2*(fw-cur)/hh[i]
+                }else if(bw.inf){
+                  gg[i]<-2*(cur-bw)/hh[i]
+                }else{
+                  gg[i]<-(fw-bw)/hh[i]
+                }
+              }
+              pp[i]<-par[i]
+            }
+          }
+          if(invert) gg<- -gg
+        }
+        list("objective"=lik[1],"gradient"=gg)
       }else{
-        out<-log(sum(LL))+max.LL-log(nsim)
-      }
-      #may want to revisit later--but this seems like a good idea to avoid numerical precision issues
-      #sometimes you get this "runaway likelihood" effect likely stemming from issues in matrix inversion
-      #there's a probably a smarter way to do this that would leverage data properties to come up with an "informed" threshold, but this is probs okay for now
-      #disabled now--hoping that it might be enough to check for NAs, Infs, and <vartol at beginning to prevent "runaway" likelihood problem
-      if(is.na(out)){
-        -Inf
-      # }else if(out>1e8){
-      #   -Inf
-      }else{
-        out
+        lik[1]
       }
     }else{
       stop("Wrong number of parameters: double-check input!")
@@ -1241,10 +1400,12 @@ make.lik.fun<-function(tree,trait.data,
   }
 }
 
+#allow for sequences of NLOPT calls by passing vectors to opts...
 #' @export
 find.mle<-function(lik.fun,init=NULL,times=1,lb=NULL,ub=NULL,...,
                    recycle.init=FALSE,init.width=10,
                    on.fail=c("random.restart","NA"),max.tries=100,
+                   grad.qual=0.9,grad.step=.Machine$double.eps^(1/3),
                    verbose=FALSE){
   par.nms<-attr(lik.fun,"par.nms")
   npar<-length(par.nms)
@@ -1321,93 +1482,82 @@ find.mle<-function(lik.fun,init=NULL,times=1,lb=NULL,ub=NULL,...,
   init[nas]<-init.fxn(inds)
   opts<-list(...)
   if(is.null(opts[["algorithm"]])){
-    opts[["algorithm"]]<-"NLOPT_LN_SBPLX"
+    opts[["algorithm"]]<-c("NLOPT_LD_LBFGS","NLOPT_LN_SBPLX")
+    def.alg.flag<-TRUE
+  }else{
+    def.alg.flag<-FALSE
   }
   if(is.null(opts[["maxeval"]])){
-    opts[["maxeval"]]<-1e6
+    if(def.alg.flag){
+      opts[["maxeval"]]<-c(1e3,1e4)
+    }else{
+      opts[["maxeval"]]<-1e5
+    }
   }
   if(is.null(opts[["ftol_rel"]])){
-    opts[["ftol_rel"]]<-sqrt(.Machine[["double.eps"]])
+    opts[["ftol_rel"]]<-.Machine$double.eps^(1/3)
   }
   if(is.null(opts[["xtol_res"]])){
-    opts[["xtol_rel"]]<-sqrt(.Machine[["double.eps"]])
+    opts[["ftol_rel"]]<-.Machine$double.eps^(1/3)
   }
+  if(is.na(on.fail)) on.fail<-"NA"
   if(is.character(on.fail)) on.fail<-pmatch(on.fail[1],c("random.restart","NA"))
   if(is.na(on.fail)|!is.numeric(on.fail)) on.fail<-1
   if(verbose&is.null(opts[["print_level"]])){
     opts[["print_level"]]<-3
   }
+  runs.per.time<-max(lengths(opts))
+  opts<-lapply(opts,function(ii) rep(ii,length.out=runs.per.time))
   pars<-matrix(nrow=npar,ncol=times)
-  liks<-numeric(times)
-  inv.lik.fun<-function(x){
-    -lik.fun(x)
-  }
-  if(grepl("_LD_",opts[["algorithm"]])){
-    #very barebones finite difference-based gradient calculator
-    #experimental
-    gg<-numeric(npar)
-    hh<-rep(sqrt(.Machine[["double.eps"]]),npar)
-    grad<-function(x){
-      cur<-lik.fun(x)
-      xx<-x
-      abs.x<-abs(x)
-      inds<-abs.x>1
-      hh[inds]<-abs.x[inds]*hh[inds]
-      for(i in seq_len(npar)){
-        xx[i]<-x[i]+hh[i]
-        tmp<-(cur-lik.fun(xx))/hh[i]
-        if(is.na(tmp)|is.infinite(tmp)){
-          xx[i]<-x[i]-hh[i]
-          gg[i]<-(lik.fun(xx)-cur)/hh[i]
-        }else{
-          gg[i]<-tmp
-        }
-        xx[i]<-x[i]
-      }
-      gg
-    }
-    foo<-function(x){
-      out<-nloptr::nloptr(x,inv.lik.fun,eval_grad_f=grad,lb=lb,ub=ub,opts=opts)
-      if(is.infinite(out[["objective"]])|out[["status"]]<1|out[["status"]]>4){
-        list(objective=NA)
-      }else{
-        out
-      }
-    }
-  }else{
-    foo<-function(x){
-      out<-nloptr::nloptr(x,inv.lik.fun,lb=lb,ub=ub,opts=opts)
-      if(is.infinite(out[["objective"]])|out[["status"]]<1|out[["status"]]>4){
-        list(objective=NA)
-      }else{
-        out
-      }
-    }
-  }
+  codes<-liks<-numeric(times)
   for(i in seq_len(times)){
-    if(verbose) cat("Maximizing likelihood function... (try ",i," out of ",times,"):\n\n",sep="")
-    res<-foo(init[,i])
+    if(verbose) cat("Maximizing likelihood function... (rep ",i," out of ",times,"):\n\n",sep="")
+    for(j in seq_len(runs.per.time)){
+      if(verbose) cat("Optimization round ",j," out of ",runs.per.time,"... (rep ",i," out of ",times,"):\n\n",sep="")
+      tmp.opts<-lapply(opts,'[[',j)
+      if(grepl("_LD_",tmp.opts[["algorithm"]])){
+        grad<-TRUE
+      }else{
+        grad<-FALSE
+      }
+      res<-nloptr::nloptr(init[,i],lik.fun,lb=lb,ub=ub,opts=tmp.opts,
+                          grad=grad,grad.qual=grad.qual,grad.step=grad.step,invert=TRUE)
+      init[,i]<-res[["solution"]]
+    }
     if(on.fail==1){
       counter<-1
-      while(counter<=max.tries&is.na(res[["objective"]])){
+      while(counter<=max.tries&(is.infinite(res[["objective"]])|res[["status"]]<0)){
+        if(verbose) cat("Random restart ",counter," out of ",max.tries,"... (rep ",i," out of ",times,"):\n\n",sep="")
         counter<-counter+1
         init[,i]<-init.fxn(seq_len(npar))
-        res<-foo(init[,i])
+        for(j in seq_len(runs.per.time)){
+          if(verbose) cat("Optimization round ",j," out of ",runs.per.time,"... (rep ",i," out of ",times,"):\n\n",sep="")
+          tmp.opts<-lapply(opts,'[[',j)
+          if(grepl("_LD_",tmp.opts[["algorithm"]])){
+            grad<-TRUE
+          }else{
+            grad<-FALSE
+          }
+          res<-nloptr::nloptr(init[,i],lik.fun,lb=lb,ub=ub,opts=tmp.opts,
+                              grad=grad,grad.qual=grad.qual,grad.step=grad.step,invert=TRUE)
+          init[,i]<-res[["solution"]]
+        }
       }
     }
-    if(is.na(res[["objective"]])){
-      liks[i]<-NA
-    }else{
-      liks[i]<- -res$objective
-      pars[,i]<-res$solution
-    }
+    liks[i]<- -res[["objective"]]
+    pars[,i]<-res[["solution"]]
+    codes[i]<-res[["status"]]
   }
-  if(all(is.na(liks))){
-    stop("Failed to maximize likelihood function")
-  }else{
+  tmp.inds<-which(!(codes<0))
+  #should also check for max iteration warnings
+  #should rounding errors (-4) also be reported separately?
+  if(!length(tmp.inds)){
+    warning("Optimization algorithm failed to properly converge")
     final.max<-which.max(liks)
-    list("lnLik"=liks[final.max],
-         "estimates"=setNames(pars[,final.max],par.nms))
+  }else{
+    final.max<-tmp.inds[which.max(liks[tmp.inds])]
   }
+  list("lnLik"=liks[final.max],
+       "estimates"=setNames(pars[,final.max],par.nms),
+       "return_code"=codes[final.max])
 }
-

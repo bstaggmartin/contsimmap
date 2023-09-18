@@ -548,7 +548,7 @@
 make.cor<-function(...){
   tmp<-unlist(list(...),use.names=FALSE)
   len<-length(tmp)
-  ntraits<-tmp[len]
+  ntraits<-Re(tmp[len])
   tmp<-tmp[-len]
   out<-input<-matrix(0,ntraits,ntraits)
   lt<-lower.tri(input)

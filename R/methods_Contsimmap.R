@@ -416,7 +416,7 @@ summary.contsimmap<-function(contsimmap,printlen=6,
 get.param.info<-function(contsimmap,traits=NULL,sims=NULL,printlen=6,
                          params=c("Xsig2","Ysig2","mu","trait.data","nobs"),
                          nrows=10,ncols=printlen,nslices=2,...){
-  contsimmap<-contsimmap[traits,sims,edges]
+  contsimmap<-contsimmap[traits,sims,NULL]
   if(!is.numeric(params)){
     params<-pmatch(params,c("Xsig2","Ysig2","mu","trait.data","nobs"))
   }
