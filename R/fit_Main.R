@@ -46,11 +46,9 @@ make.lik.fun<-function(tree,trait.data,
                        mu=NULL,
                        Yvar=NULL,Ycor=NULL,
                        nsim=NULL,
-                       wgts=1,
                        root.nuisance.prior=FALSE,
-                       wgt.by.nobs=TRUE,
-                       tree.nuisance.prior=FALSE,
-                       vartol=1e-10,experimental.truncation=FALSE,
+                       wgts=1,wgt.by.nobs=TRUE,tree.nuisance.prior=FALSE,
+                       vartol=sqrt(.Machine$double.eps),
                        ...){
   
   ####INITIAL INPUT PROCESSING####
@@ -165,7 +163,7 @@ make.lik.fun<-function(tree,trait.data,
     for(e in topo.info[["prune.seq"]]){
       has.des[,e,]<-matrix(has.obs[,e,,drop=FALSE],ntraits,nsim)|apply(has.des[,des[[e]],,drop=FALSE],c(1,3),any)
     }
-    nts<-rbind(1,.get.ns(tree))[,tree.info[["treeID"]]]
+    nts<-rbind(1,.get.ns(tree))[,tree.info[["treeID"]],drop=FALSE]
     has.des<-lapply(seq_len(ntraits),function(ii) rep(has.des[ii,,,drop=FALSE],nts))
     trees<-rep(seq_along(tree.info[["treeID"]]),colSums(nts))
     conmaps[["RES_trees"]]<-trees
@@ -730,6 +728,7 @@ make.lik.fun<-function(tree,trait.data,
     des.inf.holder<-matrix(FALSE,ntraits,nsim)
     calc.all<-function(e,xvar,yvar,cors,mu,VV,ZZ,RR,double.RR,
                        traitID.inds,treeID.inds,sims.per.traitID,sims.per.treeID,traitID.seq,treeID.seq,nsim,
+                       full.has.obs,full.has.x,traitID,
                        RR.holder,PZ.holder,VV.holder,des.inf.holder){
       #need to actually start keeping track of infinite precisions (aka 0 variances) here!
       #I think this all works, but hard to tell--basically just keeps track of variance-covariance matrices with 0 along diagonal
@@ -964,6 +963,8 @@ make.lik.fun<-function(tree,trait.data,
              (if(has.des[e]) .sum.ls(RR[des[[e]]],ndes[e]) else 0),
            cors[[2]])
     }
+    full.has.obs<-NULL
+    full.has.x<-NULL
   }else{
     #make simpler univariate versions...
     sum.obs<-matrix(unlist(lapply(parsed.obs,sum),use.names=FALSE),nedges,ntraitID)
@@ -989,6 +990,7 @@ make.lik.fun<-function(tree,trait.data,
     des.inf.holder<-logical(nsim)
     calc.all<-function(e,xvar,yvar,cors,mu,VV,ZZ,RR,double.RR,
                        traitID.inds,treeID.inds,sims.per.traitID,sims.per.treeID,traitID.seq,treeID.seq,nsim,
+                       full.has.obs,full.has.x,traitID,
                        RR.holder,PZ.holder,VV.holder,des.inf.holder){
       #need to do descendants first (good checkpoint for infinite precisions)
       if(has.des[e]){
@@ -1205,6 +1207,12 @@ make.lik.fun<-function(tree,trait.data,
       traitID.seq<-which(sims.per.traitID>0)
       treeID.seq<-which(sims.per.treeID>0)
       
+      if(!mult.traits){
+        full.has.obs<-full.has.obs[,tree.inds,drop=FALSE]
+        full.has.x<-full.has.x[,tree.inds,drop=FALSE]
+        traitID<-traitID[tree.inds]
+      }
+      
       #correct sizes of containers
       RR.holder<-numeric(nsim)
       RR<-rep(list(RR.holder),nedges)
@@ -1238,6 +1246,7 @@ make.lik.fun<-function(tree,trait.data,
     for(e in prune.seq){
       tmp<-calc.all(e,xvar,yvar,cors,mu,VV,ZZ,RR,root.nuisance.prior&e==1,
                     traitID.inds,treeID.inds,sims.per.traitID,sims.per.treeID,traitID.seq,treeID.seq,nsim,
+                    full.has.obs,full.has.x,traitID,
                     RR.holder,PZ.holder,VV.holder,des.inf.holder)
       if(is.null(tmp)) return(-Inf)
       VV[[e]]<-tmp[[1]]
@@ -1248,10 +1257,6 @@ make.lik.fun<-function(tree,trait.data,
     LL<-wgts+RR[[1]]
     max.LL<-max(LL)
     LL<-exp(LL-max.LL)
-    if(experimental.truncation){
-      tmp.thresh<-sum(LL)/nsim
-      LL[LL>tmp.thresh]<-tmp.thresh
-    }
     if(tree.nuisance.prior){
       log.sum.LL<-log(sum(LL))
       LL<-LL^2
@@ -1280,15 +1285,19 @@ make.lik.fun<-function(tree,trait.data,
           #probably a terrible idea...but oh well :/
           gg<-rnorm(npar)
         }else{
-          LL<-attr(lik,"LL")
-          LL<-LL/sum(LL)
-          ord<-order(LL,decreasing=TRUE)
-          #trees that contribute to 90% of likelihood!
-          #might even be able to get away with 50%...
-          #1.5 is just a random guess as to an appropriate sample size in this situation...
-          #2 seems safer
-          tmp.size<-min(sum(LL>0),round(grad.qual*nsim),2*min(which(cumsum(LL[ord])>grad.qual)))
-          inds<-sort.int(sample.int(nsim,tmp.size,prob=LL))
+          if(grad.qual<1){
+            LL<-attr(lik,"LL")
+            LL<-LL/sum(LL)
+            ord<-order(LL,decreasing=TRUE)
+            #trees that contribute to 90% of likelihood!
+            #might even be able to get away with 50%...
+            #1.5 is just a random guess as to an appropriate sample size in this situation...
+            #2 seems safer
+            tmp.size<-min(sum(LL>0),round(grad.qual*nsim),2*min(which(cumsum(LL[ord])>grad.qual)))
+            inds<-sort.int(sample.int(nsim,tmp.size,prob=LL))
+          }else{
+            inds<-NULL
+          }
           cur<-tryCatch(int.out(par,inds),error=function(e) -Inf)
           #random gradients upon errors didn't seem awful...so I think I'll just do that from now on
           if(is.infinite(cur)){
@@ -1372,29 +1381,18 @@ make.lik.fun<-function(tree,trait.data,
 }
 
 .get.init.fxn<-function(lb,ub,npar,init.width){
+  #now forces all parameters to initialize around 0 as much as possible
   if(is.null(lb)) lb<-rep(-Inf,npar)
   if(is.null(ub)) ub<-rep(Inf,npar)
   lb.inf<-is.infinite(lb)
   ub.inf<-is.infinite(ub)
-  tmp<-lb.inf&!ub.inf
-  lb[tmp]<-ub[tmp]-init.width
-  tmp<-ub.inf&!lb.inf
-  ub[tmp]<-lb[tmp]+init.width
-  tmp<-lb.inf&ub.inf
-  lb[tmp]<- -init.width/2
-  ub[tmp]<-init.width/2
-  #more "dynamic" way of picking init intervals
-  #prioritizes picking inits close to 0, even if the allowable range is quite large
-  #allows one to specify "informative" bounds without affecting initialization behavior
-  #most of the time, theoretically at lest, parameters should be quite close to 0...
-  tmp<-!lb.inf&!ub.inf
-  if(any(tmp)){
-    cents<-cbind((lb[tmp]+ub[tmp])/2,lb[tmp]+init.width/2,ub[tmp]-init.width/2)
-    whichs<-apply(abs(cents),1,which.min)
-    cents<-cents[cbind(seq_len(sum(tmp)),whichs)]
-    lb[tmp]<-pmax(lb[tmp],cents-init.width/2)
-    ub[tmp]<-pmin(ub[tmp],cents+init.width/2)
-  }
+  lb[lb.inf]<-pmin(-init.width/2,ub[lb.inf]-init.width)
+  ub[ub.inf]<-pmax(init.width/2,lb[ub.inf]+init.width)
+  cents<-cbind((lb+ub)/2,lb+init.width/2,ub-init.width/2)
+  whichs<-apply(abs(cents),1,which.min)
+  cents<-cents[cbind(seq_len(npar),whichs)]
+  lb<-pmax(lb,cents-init.width/2)
+  ub<-pmin(ub,cents+init.width/2)
   function(inds){
     runif(length(inds),lb[inds],ub[inds])
   }
@@ -1482,25 +1480,20 @@ find.mle<-function(lik.fun,init=NULL,times=1,lb=NULL,ub=NULL,...,
   init[nas]<-init.fxn(inds)
   opts<-list(...)
   if(is.null(opts[["algorithm"]])){
-    opts[["algorithm"]]<-c("NLOPT_LD_LBFGS","NLOPT_LN_SBPLX")
-    def.alg.flag<-TRUE
-  }else{
-    def.alg.flag<-FALSE
+    opts[["algorithm"]]<-c("NLOPT_LD_TNEWTON_PRECOND_RESTART","NLOPT_LN_SBPLX",if(npar>1) "NLOPT_LN_PRAXIS" else NULL)
   }
   if(is.null(opts[["maxeval"]])){
-    if(def.alg.flag){
-      opts[["maxeval"]]<-c(1e3,1e4)
-    }else{
-      opts[["maxeval"]]<-1e5
-    }
+    opts[["maxeval"]]<-c(1e4,1e3)[as.numeric(grepl("LD",opts[["algorithm"]]))+1]
   }
   if(is.null(opts[["ftol_rel"]])){
-    opts[["ftol_rel"]]<-.Machine$double.eps^(1/3)
+    opts[["ftol_rel"]]<-sqrt(.Machine$double.eps)
   }
   if(is.null(opts[["xtol_res"]])){
-    opts[["ftol_rel"]]<-.Machine$double.eps^(1/3)
+    opts[["ftol_rel"]]<-sqrt(.Machine$double.eps)
   }
-  if(is.na(on.fail)) on.fail<-"NA"
+  if(length(on.fail)==1){
+    if(is.na(on.fail)) on.fail<-"NA"
+  }
   if(is.character(on.fail)) on.fail<-pmatch(on.fail[1],c("random.restart","NA"))
   if(is.na(on.fail)|!is.numeric(on.fail)) on.fail<-1
   if(verbose&is.null(opts[["print_level"]])){
@@ -1522,6 +1515,10 @@ find.mle<-function(lik.fun,init=NULL,times=1,lb=NULL,ub=NULL,...,
       }
       res<-nloptr::nloptr(init[,i],lik.fun,lb=lb,ub=ub,opts=tmp.opts,
                           grad=grad,grad.qual=grad.qual,grad.step=grad.step,invert=TRUE)
+      #check for early terminations
+      if((is.infinite(res[["objective"]])|res[["status"]]<0)&grepl("LBFGS|TNEWTON",tmp.opts[["algorithm"]])&res[["iterations"]]<20){
+        break
+      }
       init[,i]<-res[["solution"]]
     }
     if(on.fail==1){
@@ -1540,6 +1537,9 @@ find.mle<-function(lik.fun,init=NULL,times=1,lb=NULL,ub=NULL,...,
           }
           res<-nloptr::nloptr(init[,i],lik.fun,lb=lb,ub=ub,opts=tmp.opts,
                               grad=grad,grad.qual=grad.qual,grad.step=grad.step,invert=TRUE)
+          if((is.infinite(res[["objective"]])|res[["status"]]<0)&grepl("LBFGS|TNEWTON",tmp.opts[["algorithm"]])&res[["iterations"]]<20){
+            break
+          }
           init[,i]<-res[["solution"]]
         }
       }
