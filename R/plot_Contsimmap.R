@@ -318,8 +318,51 @@ plot.contsimmap<-function(contsimmap,
                           add=FALSE,reverse.layers=FALSE,
                           ...){
   
-  #no NA traits for now!
+  #be nice to eventually treat time similarly to this
   if(is.character(traits)){
+    if(any(traits=="phylogram"|traits=="cladogram")){
+      pdf(file=NULL)
+      plot.phylo(attr(contsimmap,"tree")[[1]],show.tip.label=FALSE)
+      dev.off()
+      tmp<-get("last_plot.phylo",envir=.PlotPhyloEnv)[c("edge","yy")]
+      nts<-contsimmap:::.get.ns(contsimmap,uncompress=TRUE)
+      tmp.edges<-as.numeric(gsub("N","",dimnames(contsimmap)[[1]]))
+      tmp.edges[!tmp.edges]<-NA
+      nodes<-tmp$edge[tmp.edges,2]
+      nodes[is.na(nodes)]<-Ntip(contsimmap)+1
+      #below could probs be made more efficient...
+      if(any(traits=="phylogram")){
+        contsimmap<-contsimmap[,c(seq_len(dim(contsimmap)[2]),NA)]
+        dimnames(contsimmap)[[2]][dim(contsimmap)[2]]<-"phylogram"
+        params<-attr(contsimmap,"params")
+        params<-cbind(params,rep(list(NULL),nrow(params)))
+        params[["call_info",ncol(params)]]<-list("fxn"="phylogram","formula"=NA)
+        attr(contsimmap,"params")<-params
+        attr(contsimmap,"traits")[length(attr(contsimmap,"traits"))]<-ncol(params)
+        names(attr(contsimmap,"traits"))[length(attr(contsimmap,"traits"))]<-"phylogram"
+        contsimmap<-unclass(contsimmap)
+        contsimmap[,"phylogram",]<-do.call(rbind,lapply(seq_along(tmp$yy),function(ii) lapply(nts[ii,],rep,x=tmp$yy[nodes[ii]])))
+        class(contsimmap)<-"contsimmap"
+      }
+      if(any(traits=="cladogram")){
+        anc.nodes<-tmp$edge[tmp.edges,1]
+        anc.nodes[is.na(anc.nodes)]<-Ntip(contsimmap)+1
+        diffs<-tmp$yy[nodes]-tmp$yy[anc.nodes]
+        dts<-contsimmap:::.get.maps(contsimmap,"dts",uncompress=TRUE)
+        dts[]<-lapply(dts,function(ii) if(sum(ii)==0) 0 else cumsum(ii)/sum(ii))
+        contsimmap<-contsimmap[,c(seq_len(dim(contsimmap)[2]),NA)]
+        dimnames(contsimmap)[[2]][dim(contsimmap)[2]]<-"cladogram"
+        params<-attr(contsimmap,"params")
+        params<-cbind(params,rep(list(NULL),nrow(params)))
+        params[["call_info",ncol(params)]]<-list("fxn"="cladogram","formula"=NA)
+        attr(contsimmap,"params")<-params
+        attr(contsimmap,"traits")[length(attr(contsimmap,"traits"))]<-ncol(params)
+        names(attr(contsimmap,"traits"))[length(attr(contsimmap,"traits"))]<-"cladogram"
+        contsimmap<-unclass(contsimmap)
+        contsimmap[,"cladogram",]<-do.call(rbind,lapply(seq_along(tmp$yy),function(ii) lapply(dts[ii,],function(jj) diffs[ii]*jj^(1/20)+tmp$yy[anc.nodes[ii]])))
+        class(contsimmap)<-"contsimmap"
+      }
+    }
     traits<-pmatch(traits,dimnames(contsimmap)[[2]])
   }
   traits<-dimnames(contsimmap)[[2]][traits]
@@ -331,6 +374,7 @@ plot.contsimmap<-function(contsimmap,
   bys<-.parse.bys(c('simulation','state','edge','time',dimnames(contsimmap)[[2]]),
                   Col.by,Layer.by,Alpha.by,Mix.by,Wgt.by,Lty.by,Lwd.by,one.trait)
   traits.to.extract<-unique(c(traits,bys[attr(bys,'trait.flag')]))
+  if(is.null(traits.to.extract)) traits.to.extract<-0
   contsimmap<-contsimmap[edges,traits.to.extract,sims]
   foo<-function(x){
     tmp<-contsimmap[,x,]
@@ -345,13 +389,26 @@ plot.contsimmap<-function(contsimmap,
   ##by various variables...
   #they may not be necessary ultimately
   extractions<-setNames(rep(list(rep(list(NA),2*len)),length(things.to.extract)),things.to.extract)
-  extractions[[1]][c(TRUE,FALSE)]<-lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[1],lens[ii]))
-  for(i in things.to.extract[-1]){
-    extractions[[i]][c(TRUE,FALSE)]<-switch(i,
-                                            simulation=lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[3],lens[ii])),
-                                            state=lapply(parsed.contsimmap[[1]],'[[','states'),
-                                            time=lapply(parsed.contsimmap[[1]],'[[','ts'),
-                                            lapply(parsed.contsimmap[[i]],'[[','values'))
+  if(any(traits=="phylogram")){
+    lens<-lens+1
+    extractions[[1]][c(TRUE,FALSE)]<-lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[1],lens[ii]))
+    for(i in things.to.extract[-1]){
+      extractions[[i]][c(TRUE,FALSE)]<-switch(i,
+                                              simulation=lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[3],lens[ii])),
+                                              state=lapply(parsed.contsimmap[[1]],function(ii) ii[["states"]][c(1,seq_along(ii[["states"]]))]),
+                                              time=lapply(parsed.contsimmap[[1]],function(ii) ii[["ts"]][c(1,seq_along(ii[["ts"]]))]),
+                                              phylogram=lapply(parsed.contsimmap[[i]],function(ii) ii[["values"]][c(1,2,seq_along(ii[["values"]])[-1])]),
+                                              lapply(parsed.contsimmap[[i]],function(ii) ii[["values"]][c(1,seq_along(ii[["values"]]))]))
+    }
+  }else{
+    extractions[[1]][c(TRUE,FALSE)]<-lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[1],lens[ii]))
+    for(i in things.to.extract[-1]){
+      extractions[[i]][c(TRUE,FALSE)]<-switch(i,
+                                              simulation=lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[3],lens[ii])),
+                                              state=lapply(parsed.contsimmap[[1]],'[[','states'),
+                                              time=lapply(parsed.contsimmap[[1]],'[[','ts'),
+                                              lapply(parsed.contsimmap[[i]],'[[','values'))
+    }
   }
   state.ind<-which(things.to.extract=="state")
   if(inherits(contsimmap,"summarized_contsimmap")&length(state.ind)){
@@ -399,6 +456,6 @@ plot.contsimmap<-function(contsimmap,
     final.args[c('x','y','col','lty','lwd')]<-list(unlist(xx[inds[,i]],use.names=FALSE),
                                                    unlist(yy[inds[,i]],use.names=FALSE),
                                                    col[i],lty[i],lwd[i])
-    do.call(lines,final.args) #something may be wrong...
+    do.call(lines,final.args)
   }
 }

@@ -1276,63 +1276,72 @@ make.lik.fun<-function(tree,trait.data,
   gg<-numeric(npar)
   out<-function(par,
                 grad=FALSE,grad.qual=0.9,grad.step=(.Machine$double.eps)^(1/3),
-                invert=FALSE){
+                invert=FALSE,
+                return.LL=FALSE){
     if(length(par)==npar){
       lik<-tryCatch(int.out(par),error=function(e) -Inf)
       if(invert) lik<- -lik
-      if(grad){
+      if(return.LL){
         if(is.infinite(lik)){
-          #probably a terrible idea...but oh well :/
-          gg<-rnorm(npar)
+          rep(lik,nsim)
         }else{
-          if(grad.qual<1){
-            LL<-attr(lik,"LL")
-            LL<-LL/sum(LL)
-            ord<-order(LL,decreasing=TRUE)
-            #trees that contribute to 90% of likelihood!
-            #might even be able to get away with 50%...
-            #1.5 is just a random guess as to an appropriate sample size in this situation...
-            #2 seems safer
-            tmp.size<-min(sum(LL>0),round(grad.qual*nsim),2*min(which(cumsum(LL[ord])>grad.qual)))
-            inds<-sort.int(sample.int(nsim,tmp.size,prob=LL))
-          }else{
-            inds<-NULL
-          }
-          cur<-tryCatch(int.out(par,inds),error=function(e) -Inf)
-          #random gradients upon errors didn't seem awful...so I think I'll just do that from now on
-          if(is.infinite(cur)){
-            gg<-c(-0.1,0.1)[rbinom(npar,1,0.5)+1]
-          }else{
-            hh<-rep(grad.step,npar)
-            tmp.inds<-abs(par)>1
-            hh[tmp.inds]<-hh[tmp.inds]*abs(par[tmp.inds])
-            pp<-par
-            for(i in seq_along(par)){
-              pp[i]<-par[i]+hh[i]/2
-              fw<-tryCatch(int.out(pp,inds),error=function(e) -Inf)
-              fw.inf<-is.infinite(fw)
-              pp[i]<-par[i]-hh[i]/2
-              bw<-tryCatch(int.out(pp,inds),error=function(e) -Inf)
-              bw.inf<-is.infinite(bw)
-              if(fw.inf&bw.inf){
-                gg[i]<-c(-0.1,0.1)[rbinom(1,1,0.5)+1]
-              }else{
-                if(fw.inf){
-                  gg[i]<-2*(fw-cur)/hh[i]
-                }else if(bw.inf){
-                  gg[i]<-2*(cur-bw)/hh[i]
-                }else{
-                  gg[i]<-(fw-bw)/hh[i]
-                }
-              }
-              pp[i]<-par[i]
-            }
-          }
-          if(invert) gg<- -gg
+          if(invert) -attr(lik,"LL") else attr(lik,"LL")
         }
-        list("objective"=lik[1],"gradient"=gg)
       }else{
-        lik[1]
+        if(grad){
+          if(is.infinite(lik)){
+            #probably a terrible idea...but oh well :/
+            gg<-rnorm(npar)
+          }else{
+            if(grad.qual<1){
+              LL<-attr(lik,"LL")
+              LL<-LL/sum(LL)
+              ord<-order(LL,decreasing=TRUE)
+              #trees that contribute to 90% of likelihood!
+              #might even be able to get away with 50%...
+              #1.5 is just a random guess as to an appropriate sample size in this situation...
+              #2 seems safer
+              tmp.size<-min(sum(LL>0),round(grad.qual*nsim),2*min(which(cumsum(LL[ord])>grad.qual)))
+              inds<-sort.int(sample.int(nsim,tmp.size,prob=LL))
+            }else{
+              inds<-NULL
+            }
+            cur<-tryCatch(int.out(par,inds),error=function(e) -Inf)
+            #random gradients upon errors didn't seem awful...so I think I'll just do that from now on
+            if(is.infinite(cur)){
+              gg<-c(-0.1,0.1)[rbinom(npar,1,0.5)+1]
+            }else{
+              hh<-rep(grad.step,npar)
+              tmp.inds<-abs(par)>1
+              hh[tmp.inds]<-hh[tmp.inds]*abs(par[tmp.inds])
+              pp<-par
+              for(i in seq_along(par)){
+                pp[i]<-par[i]+hh[i]/2
+                fw<-tryCatch(int.out(pp,inds),error=function(e) -Inf)
+                fw.inf<-is.infinite(fw)
+                pp[i]<-par[i]-hh[i]/2
+                bw<-tryCatch(int.out(pp,inds),error=function(e) -Inf)
+                bw.inf<-is.infinite(bw)
+                if(fw.inf&bw.inf){
+                  gg[i]<-c(-0.1,0.1)[rbinom(1,1,0.5)+1]
+                }else{
+                  if(fw.inf){
+                    gg[i]<-2*(fw-cur)/hh[i]
+                  }else if(bw.inf){
+                    gg[i]<-2*(cur-bw)/hh[i]
+                  }else{
+                    gg[i]<-(fw-bw)/hh[i]
+                  }
+                }
+                pp[i]<-par[i]
+              }
+            }
+            if(invert) gg<- -gg
+          }
+          list("objective"=lik[1],"gradient"=gg)
+        }else{
+          lik[1]
+        }
       }
     }else{
       stop("Wrong number of parameters: double-check input!")
@@ -1480,7 +1489,9 @@ find.mle<-function(lik.fun,init=NULL,times=1,lb=NULL,ub=NULL,...,
   init[nas]<-init.fxn(inds)
   opts<-list(...)
   if(is.null(opts[["algorithm"]])){
-    opts[["algorithm"]]<-c("NLOPT_LD_TNEWTON_PRECOND_RESTART","NLOPT_LN_SBPLX",if(npar>1) "NLOPT_LN_PRAXIS" else NULL)
+    opts[["algorithm"]]<-c(if(npar>2) "NLOPT_LD_TNEWTON_PRECOND_RESTART" else NULL,
+                           "NLOPT_LN_SBPLX",
+                           if(npar>2) "NLOPT_LN_PRAXIS" else NULL)
   }
   if(is.null(opts[["maxeval"]])){
     opts[["maxeval"]]<-c(1e4,1e3)[as.numeric(grepl("LD",opts[["algorithm"]]))+1]
@@ -1514,7 +1525,7 @@ find.mle<-function(lik.fun,init=NULL,times=1,lb=NULL,ub=NULL,...,
         grad<-FALSE
       }
       res<-nloptr::nloptr(init[,i],lik.fun,lb=lb,ub=ub,opts=tmp.opts,
-                          grad=grad,grad.qual=grad.qual,grad.step=grad.step,invert=TRUE)
+                          grad=grad,grad.qual=grad.qual,grad.step=grad.step,invert=TRUE,return.LL=FALSE)
       #check for early terminations
       if((is.infinite(res[["objective"]])|res[["status"]]<0)&grepl("LBFGS|TNEWTON",tmp.opts[["algorithm"]])&res[["iterations"]]<20){
         break
@@ -1536,7 +1547,7 @@ find.mle<-function(lik.fun,init=NULL,times=1,lb=NULL,ub=NULL,...,
             grad<-FALSE
           }
           res<-nloptr::nloptr(init[,i],lik.fun,lb=lb,ub=ub,opts=tmp.opts,
-                              grad=grad,grad.qual=grad.qual,grad.step=grad.step,invert=TRUE)
+                              grad=grad,grad.qual=grad.qual,grad.step=grad.step,invert=TRUE,return.LL=FALSE)
           if((is.infinite(res[["objective"]])|res[["status"]]<0)&grepl("LBFGS|TNEWTON",tmp.opts[["algorithm"]])&res[["iterations"]]<20){
             break
           }
