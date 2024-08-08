@@ -1571,4 +1571,5 @@ find.mle<-function(lik.fun,init=NULL,times=1,lb=NULL,ub=NULL,...,
   list("lnLik"=liks[final.max],
        "estimates"=setNames(pars[,final.max],par.nms),
        "return_code"=codes[final.max])
+  #eventually make a function to format output nicely
 }

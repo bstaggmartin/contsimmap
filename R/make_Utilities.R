@@ -241,7 +241,8 @@
         incl[['values']]<-!nzchar(incl[['values']])
         state[['values']][incl[['values']]]<-state[['values']][-1][incl[['values']]]
         dt<-t[-1]-t[-length(t)]
-        dups<-dt<1e-14
+        dups<-dt<1e-13 #tolerance seems to break down sometimes
+        #may have to come up with better solution
         tmp.len<-sum(!dups)+1
         excl.inds<- -(which(dups)+1)
         dt<-t[excl.inds][-1]-t[excl.inds][-tmp.len]

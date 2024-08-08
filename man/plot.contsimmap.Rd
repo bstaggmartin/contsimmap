@@ -18,6 +18,10 @@
   Lwd.by = NULL,
   add = FALSE,
   reverse.layers = FALSE,
+  polarize = FALSE,
+  ang.min = 0,
+  ang.max = 2 * pi,
+  curviness = 1,
   ...
 )
 }
@@ -27,7 +31,16 @@
 \item{traits}{A character/numeric vector specifying which traits within \code{contsimmap} to plot. Specifying a single trait results in a
 "phenogram"-style plot with the x-axis corresponding to time; specifying multiple traits results in a "phylomorphospace"-style plot with the
 first two traits corresponding to the x and y-axes, respectively. Additional traits are ignored for now, though a \code{pairs()} or 3D plotting
-method may implemented in the future. Also, \code{NA} traits are \emph{not yet supported and could break the function spectacularly}.}
+method may implemented in the future. Also, \code{NA} traits are \emph{not yet supported and could break the function spectacularly}.
+
+Alternatively, phylogenies may be plotted in more traditional styles akin to 
+the \code{plot.phylo()} function in \bold{ape} by setting 
+\code{trait = "phylogram"} or \code{trait = "cladogram"}. In conjunction with the 
+\code{Col.by}, \code{Mix.by}, etc. arguments, this allows one to 
+annotate phylogenies with colors according to mapped continuous and/or 
+discrete states, much like the \code{contMap()} or \code{plotSimmap()} functions 
+from \bold{phytools}. Fan-style phylogenies may also be plotted by 
+setting the \code{polarize} argument to \code{TRUE}.}
 
 \item{sims}{A character/numeric vector specifying which simulations within \code{contsimmap} to plot. Set to \code{NULL} to plot all
 simulations. \code{NA} simulations are not yet supported and could break the function spectacularly.}
@@ -49,6 +62,24 @@ is for \code{Alpha.by}/\code{Mix.by}/\code{Lty.by}, whatever \code{Mix.by} is fo
 
 \item{add}{\code{TRUE} or \code{FALSE}: should the plot be added to the existing plot window or initiate a new plotting window?}
 
+\item{reverse.layers}{\code{TRUE} or \code{FALSE}: should the layering order specified by \code{Layer.by} (and the optional \code{layer}
+argument passed to \code{...}) be reversed? For example, if \code{Layer.by = "time"} and \code{reverse.layering = TRUE}, the
+\emph{older}, rather than younger, parts of the phylogeny will be plotted last.}
+
+\item{polarize}{\code{TRUE} or \code{FALSE}: should the x and y coordinates be 
+transformed to polar coordinates r and \eqn{\theta}, respectively? This is mainly 
+for plotting phylogenies in conventional fan style by specifying \code{traits = "phylogram"} and 
+\code{polarize = TRUE}, though maybe you want to "polarize" a phenogram/phylomorphospace for some reason? Seems kinda like a
+neat idea, and I don't judge!}
+
+\item{ang.min}{If \code{polarize = TRUE}: specifies the angle (in radians) that the minimum y coordinate gets converted to.}
+
+\item{ang.max}{If \code{polarize = TRUE}: specifies the angle (in radians) that the maximum y coordinate gets converted to.}
+
+\item{curviness}{If \code{traits = "cladogram"}: a positive number specifying the degree to which
+edge lines are "biased" towards the y coordinate of ancestral nodes (if <1) versus 
+descendant nodes (if >1). The default is 1, resulting in perfectly straight lines that don't curve.}
+
 \item{...}{Just about any base R graphical argument you can think of--it should theoretically all work! Notably, entries of \code{col},
 \code{lty}, and \code{lwd} are recycled according to their respective \code{<xxx>.by} arguments:
 \itemize{
@@ -67,7 +98,7 @@ There are also a few additional and potentially important arguments:
 \item{\code{layer}, which is used to alter the layering order by specifying "high priority" elements. For example, setting \code{layer = 
 "tree1_sim1"} ensures that simulation "tree1_sim1" is plotted last, assuming that \code{Layer.by = "simulation"}. \code{layer} can also be a
 numeric or logical vector. If \code{Layer.by} is set to "time" or a trait name, one can even use this argument to specify particular time
-slices or trait values that should be plotted last. Note that that this instead specifies "low priority" elements that plotted \emph{first} if
+slices or trait values that should be plotted last. Note that that this instead specifies "low priority" elements that are plotted \emph{first} if
 \code{reverse.layering = TRUE}.}
 \item{\code{alpha}, \code{mix}, and \code{wgt}, which are recycled as described above and correspond to the same arguments in
 \code{alter.cols()}.}
@@ -77,13 +108,14 @@ are constructed. This is similar to the \code{breaks} argument in the \code{imag
 This can also be set to an integer, in which case \code{<xxx>.breaks + 2} equally-spaced intervals are constructed across an appropriate range.
 If not specified, these arguments are set to \code{100L} by default.}
 }}
-
-\item{reverse.layering}{\code{TRUE} or \code{FALSE}: should the layering order specified by \code{Layer.by} (and the optional \code{layer}
-argument passed to \code{...}) be reversed? For example, if \code{Layer.by = "time"} and \code{reverse.layering = TRUE}, the
-\emph{older}, rather than younger, parts of the phylogeny will be plotted last.}
 }
 \value{
-Nothing for now--just makes a plot!
+Invisibly assigns plot information to "\code{last_plot.phylo}" in 
+\code{.PlotPhyloEnv} environment, just like the \code{plot.phylo()} 
+function from \bold{ape}. Most importantly, this allows the use of the 
+\bold{ape} functions \code{nodelabels()}, \code{tiplabels()}, and 
+\code{edgelabels()} for further plot annotation. Note that tip/node 
+coordinates are averaged if multiple simulations are plotted at once.
 }
 \description{
 This function runs the default plotting method for continuous stochastic character maps (class "\code{contsimmap}").

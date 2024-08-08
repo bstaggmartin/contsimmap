@@ -253,11 +253,22 @@
 #'
 #' This function runs the default plotting method for continuous stochastic character maps (class "\code{contsimmap}").
 #'
+#'
+#'
 #' @param contsimmap An object of class "\code{contsimmap}".
 #' @param traits A character/numeric vector specifying which traits within \code{contsimmap} to plot. Specifying a single trait results in a
 #' "phenogram"-style plot with the x-axis corresponding to time; specifying multiple traits results in a "phylomorphospace"-style plot with the
 #' first two traits corresponding to the x and y-axes, respectively. Additional traits are ignored for now, though a \code{pairs()} or 3D plotting
 #' method may implemented in the future. Also, \code{NA} traits are \emph{not yet supported and could break the function spectacularly}.
+#' 
+#' Alternatively, phylogenies may be plotted in more traditional styles akin to 
+#' the \code{plot.phylo()} function in \bold{ape} by setting 
+#' \code{trait = "phylogram"} or \code{trait = "cladogram"}. In conjunction with the 
+#' \code{Col.by}, \code{Mix.by}, etc. arguments, this allows one to 
+#' annotate phylogenies with colors according to mapped continuous and/or 
+#' discrete states, much like the \code{contMap()} or \code{plotSimmap()} functions 
+#' from \bold{phytools}. Fan-style phylogenies may also be plotted by 
+#' setting the \code{polarize} argument to \code{TRUE}.
 #' @param sims A character/numeric vector specifying which simulations within \code{contsimmap} to plot. Set to \code{NULL} to plot all
 #' simulations. \code{NA} simulations are not yet supported and could break the function spectacularly.
 #' @param edges A character/numeric vector specifying which edges within \code{contsimmap} to plot. Set to \code{NULL} to plot all edges.
@@ -274,9 +285,19 @@
 #' is for \code{Alpha.by}/\code{Mix.by}/\code{Lty.by}, whatever \code{Mix.by} is for \code{Wgt.by}, and whatever \code{Lty.by} is for
 #' \code{Lwd.by}.
 #' @param add \code{TRUE} or \code{FALSE}: should the plot be added to the existing plot window or initiate a new plotting window?
-#' @param reverse.layering \code{TRUE} or \code{FALSE}: should the layering order specified by \code{Layer.by} (and the optional \code{layer}
+#' @param reverse.layers \code{TRUE} or \code{FALSE}: should the layering order specified by \code{Layer.by} (and the optional \code{layer}
 #' argument passed to \code{...}) be reversed? For example, if \code{Layer.by = "time"} and \code{reverse.layering = TRUE}, the
 #' \emph{older}, rather than younger, parts of the phylogeny will be plotted last.
+#' @param polarize \code{TRUE} or \code{FALSE}: should the x and y coordinates be 
+#' transformed to polar coordinates r and \eqn{\theta}, respectively? This is mainly 
+#' for plotting phylogenies in conventional fan style by specifying \code{traits = "phylogram"} and 
+#' \code{polarize = TRUE}, though maybe you want to "polarize" a phenogram/phylomorphospace for some reason? Seems kinda like a
+#' neat idea, and I don't judge!
+#' @param ang.min If \code{polarize = TRUE}: specifies the angle (in radians) that the minimum y coordinate gets converted to.
+#' @param ang.max If \code{polarize = TRUE}: specifies the angle (in radians) that the maximum y coordinate gets converted to.
+#' @param curviness If \code{traits = "cladogram"}: a positive number specifying the degree to which
+#' edge lines are "biased" towards the y coordinate of ancestral nodes (if <1) versus 
+#' descendant nodes (if >1). The default is 1, resulting in perfectly straight lines that don't curve.
 #' @param ... Just about any base R graphical argument you can think of--it should theoretically all work! Notably, entries of \code{col},
 #' \code{lty}, and \code{lwd} are recycled according to their respective \code{<xxx>.by} arguments:
 #' \itemize{
@@ -295,7 +316,7 @@
 #' \item{\code{layer}, which is used to alter the layering order by specifying "high priority" elements. For example, setting \code{layer = 
 #' "tree1_sim1"} ensures that simulation "tree1_sim1" is plotted last, assuming that \code{Layer.by = "simulation"}. \code{layer} can also be a
 #' numeric or logical vector. If \code{Layer.by} is set to "time" or a trait name, one can even use this argument to specify particular time
-#' slices or trait values that should be plotted last. Note that that this instead specifies "low priority" elements that plotted \emph{first} if
+#' slices or trait values that should be plotted last. Note that that this instead specifies "low priority" elements that are plotted \emph{first} if
 #' \code{reverse.layering = TRUE}.}
 #' \item{\code{alpha}, \code{mix}, and \code{wgt}, which are recycled as described above and correspond to the same arguments in
 #' \code{alter.cols()}.}
@@ -306,9 +327,16 @@
 #' If not specified, these arguments are set to \code{100L} by default.}
 #' }
 #' 
-#' @return Nothing for now--just makes a plot!
 #' 
-#' @examples
+#' 
+#' @return Invisibly assigns plot information to "\code{last_plot.phylo}" in 
+#' \code{.PlotPhyloEnv} environment, just like the \code{plot.phylo()} 
+#' function from \bold{ape}. Most importantly, this allows the use of the 
+#' \bold{ape} functions \code{nodelabels()}, \code{tiplabels()}, and 
+#' \code{edgelabels()} for further plot annotation. Note that tip/node 
+#' coordinates are averaged if multiple simulations are plotted at once.
+#' 
+#' 
 #' 
 #' @export
 plot.contsimmap<-function(contsimmap,
@@ -316,16 +344,20 @@ plot.contsimmap<-function(contsimmap,
                           Col.by=c('simulation','state','edge','time',dimnames(contsimmap)[[2]]),
                           Layer.by=NULL,Alpha.by=NULL,Mix.by=NULL,Wgt.by=NULL,Lty.by=NULL,Lwd.by=NULL,
                           add=FALSE,reverse.layers=FALSE,
+                          polarize=FALSE,ang.min=0,ang.max=2*pi,
+                          curviness=1,
                           ...){
   
   #be nice to eventually treat time similarly to this
   if(is.character(traits)){
     if(any(traits=="phylogram"|traits=="cladogram")){
+      tmp.dev<-dev.cur()
       pdf(file=NULL)
       plot.phylo(attr(contsimmap,"tree")[[1]],show.tip.label=FALSE)
       dev.off()
+      dev.set(tmp.dev)
       tmp<-get("last_plot.phylo",envir=.PlotPhyloEnv)[c("edge","yy")]
-      nts<-contsimmap:::.get.ns(contsimmap,uncompress=TRUE)
+      nts<-.get.ns(contsimmap,uncompress=TRUE)
       tmp.edges<-as.numeric(gsub("N","",dimnames(contsimmap)[[1]]))
       tmp.edges[!tmp.edges]<-NA
       nodes<-tmp$edge[tmp.edges,2]
@@ -359,7 +391,7 @@ plot.contsimmap<-function(contsimmap,
         attr(contsimmap,"traits")[length(attr(contsimmap,"traits"))]<-ncol(params)
         names(attr(contsimmap,"traits"))[length(attr(contsimmap,"traits"))]<-"cladogram"
         contsimmap<-unclass(contsimmap)
-        contsimmap[,"cladogram",]<-do.call(rbind,lapply(seq_along(tmp$yy),function(ii) lapply(dts[ii,],function(jj) diffs[ii]*jj^(1/20)+tmp$yy[anc.nodes[ii]])))
+        contsimmap[,"cladogram",]<-do.call(rbind,lapply(seq_along(tmp$yy),function(ii) lapply(dts[ii,],function(jj) diffs[ii]*jj^(1/curviness)+tmp$yy[anc.nodes[ii]])))
         class(contsimmap)<-"contsimmap"
       }
     }
@@ -390,15 +422,30 @@ plot.contsimmap<-function(contsimmap,
   #they may not be necessary ultimately
   extractions<-setNames(rep(list(rep(list(NA),2*len)),length(things.to.extract)),things.to.extract)
   if(any(traits=="phylogram")){
-    lens<-lens+1
-    extractions[[1]][c(TRUE,FALSE)]<-lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[1],lens[ii]))
-    for(i in things.to.extract[-1]){
-      extractions[[i]][c(TRUE,FALSE)]<-switch(i,
-                                              simulation=lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[3],lens[ii])),
-                                              state=lapply(parsed.contsimmap[[1]],function(ii) ii[["states"]][c(1,seq_along(ii[["states"]]))]),
-                                              time=lapply(parsed.contsimmap[[1]],function(ii) ii[["ts"]][c(1,seq_along(ii[["ts"]]))]),
-                                              phylogram=lapply(parsed.contsimmap[[i]],function(ii) ii[["values"]][c(1,2,seq_along(ii[["values"]])[-1])]),
-                                              lapply(parsed.contsimmap[[i]],function(ii) ii[["values"]][c(1,seq_along(ii[["values"]]))]))
+    if(polarize){
+      lens<-lens+100
+      extractions[[1]][c(TRUE,FALSE)]<-lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[1],lens[ii]))
+      for(i in things.to.extract[-1]){
+        extractions[[i]][c(TRUE,FALSE)]<-switch(i,
+                                                simulation=lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[3],lens[ii])),
+                                                state=lapply(parsed.contsimmap[[1]],function(ii) ii[["states"]][c(rep(1,100),seq_along(ii[["states"]]))]),
+                                                time=lapply(parsed.contsimmap[[1]],function(ii) ii[["ts"]][c(rep(1,100),seq_along(ii[["ts"]]))]),
+                                                phylogram=lapply(parsed.contsimmap[[i]],function(ii) c(ii[["values"]][1],
+                                                                                                       (ii[["values"]][2]-ii[["values"]][1])*seq(0.01,1,0.01)+ii[["values"]][1],
+                                                                                                       ii[["values"]][-1])),
+                                                lapply(parsed.contsimmap[[i]],function(ii) ii[["values"]][c(rep(1,100),seq_along(ii[["values"]]))]))
+      }
+    }else{
+      lens<-lens+1
+      extractions[[1]][c(TRUE,FALSE)]<-lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[1],lens[ii]))
+      for(i in things.to.extract[-1]){
+        extractions[[i]][c(TRUE,FALSE)]<-switch(i,
+                                                simulation=lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[3],lens[ii])),
+                                                state=lapply(parsed.contsimmap[[1]],function(ii) ii[["states"]][c(1,seq_along(ii[["states"]]))]),
+                                                time=lapply(parsed.contsimmap[[1]],function(ii) ii[["ts"]][c(1,seq_along(ii[["ts"]]))]),
+                                                phylogram=lapply(parsed.contsimmap[[i]],function(ii) ii[["values"]][c(1,2,seq_along(ii[["values"]])[-1])]),
+                                                lapply(parsed.contsimmap[[i]],function(ii) ii[["values"]][c(1,seq_along(ii[["values"]]))]))
+      }
     }
   }else{
     extractions[[1]][c(TRUE,FALSE)]<-lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[1],lens[ii]))
@@ -423,6 +470,34 @@ plot.contsimmap<-function(contsimmap,
   edges<-sort(edge.inds(contsimmap)) #I feel like edges should be sorted for now, but may want to revisit in future
   args.ls<-.parse.args(list(...),extractions,bys,traits,one.trait,sims,states,edges)
   
+  nedges<-Nedge(contsimmap)
+  nnodes<-Nnode(contsimmap,internal.only=FALSE)
+  tmp.inds<-cumsum(lens+1)
+  tmp.inds1<-tmp.inds-1
+  tmp.inds0<-c(1,tmp.inds[-len]+1)
+  tmp.edges<-as.numeric(extractions[["edge"]][tmp.inds-1])
+  edge.matches<-lapply(seq_len(nedges),function(ii) which(tmp.edges==ii))
+  endpt.inds<-vector("list",nnodes)
+  tmp.edge.mat<-attr(contsimmap,"tree")[[1]][["edge"]]
+  has.matches<-lengths(edge.matches)>0
+  for(i in which(has.matches)){
+    endpt.inds[[tmp.edge.mat[i,2]]]<-tmp.inds1[edge.matches[[i]]]
+  }
+  tmp.inds<-match(which(lengths(endpt.inds)==0),tmp.edge.mat[,1])
+  tmp.inds<-tmp.inds[!is.na(tmp.inds)]
+  tmp.inds<-tmp.inds[has.matches[tmp.inds]]
+  for(i in tmp.inds){
+    endpt.inds[[tmp.edge.mat[i,1]]]<-tmp.inds0[edge.matches[[i]]]
+  }
+  # edge.matches<-match(seq_len(nedges),tmp.edges)
+  # endpt.inds<-rep(as.integer(NA),nnodes)
+  # endpt.inds[attr(contsimmap,"tree")[[1]][["edge"]][,2]]<-
+  #   (tmp.inds-1)[edge.matches]
+  # tmp.nas<-is.na(endpt.inds[attr(contsimmap,"tree")[[1]][["edge"]][,1]])&
+  #   !is.na(c(1,tmp.inds[-len]+2)[edge.matches])
+  # endpt.inds[attr(contsimmap,"tree")[[1]][["edge"]][tmp.nas,1]]<-
+  #   c(1,tmp.inds[-len]+1)[edge.matches][tmp.nas]
+  
   #split into unique argument combos and plot!
   par.fac<-do.call(paste,c(args.ls[c('col','layer','lty','lwd')],sep='@'))
   splits<-rle(par.fac)
@@ -437,8 +512,25 @@ plot.contsimmap<-function(contsimmap,
                                   x[[ii]]))#,
                                   #if(ii<len&!is.na(x[[ii]][lens[ii]])) c(x[[ii+1]][1],NA)))
   }
-  xx<-foo(split(extractions[[if(one.trait) 'time' else traits[1]]],splits))
-  yy<-foo(split(extractions[[traits[length(traits)]]],splits))
+  if(polarize){
+    tmp.xx<-extractions[[if(one.trait) 'time' else traits[1]]]
+    tmp.yy<-extractions[[traits[length(traits)]]]
+    tmp.yy<-(tmp.yy-min(tmp.yy,na.rm=TRUE))/diff(range(tmp.yy,na.rm=TRUE))*
+      (ang.max-ang.min)+ang.min
+    xx<-tmp.xx*cos(tmp.yy)
+    yy<-tmp.xx*sin(tmp.yy)
+  }else{
+    xx<-extractions[[if(one.trait) 'time' else traits[1]]]
+    yy<-extractions[[traits[length(traits)]]]
+  }
+  node.xx<-unlist(lapply(endpt.inds,function(ii) mean(xx[ii],na.rm=TRUE)),
+                  use.names=FALSE)
+  node.yy<-unlist(lapply(endpt.inds,function(ii) mean(yy[ii],na.rm=TRUE)),
+                  use.names=FALSE)
+  # node.xx<-xx[endpt.inds]
+  # node.yy<-yy[endpt.inds]
+  xx<-foo(split(xx,splits))
+  yy<-foo(split(yy,splits))
   tmp<-strsplit(levs,'@')
   col<-unlist(lapply(tmp,'[[',1),use.names=FALSE)
   layer<-as.numeric(unlist(lapply(tmp,'[[',2),use.names=FALSE))
@@ -450,6 +542,10 @@ plot.contsimmap<-function(contsimmap,
   lwd<-as.numeric(unlist(lapply(tmp,'[[',4),use.names=FALSE))
   final.args<-args.ls[!(grepl('\\.breaks$',names(args.ls))|names(args.ls)%in%c('col','layer','lty','lwd','x','y'))]
   if(!add){
+    if(polarize){
+      final.args[["xlim"]]<-c(-1,1)*max(final.args[["xlim"]])
+      final.args[["ylim"]]<-final.args[["xlim"]]
+    }
     do.call(plot,c(final.args,x=NA))
   }
   for(i in ord){
@@ -458,4 +554,33 @@ plot.contsimmap<-function(contsimmap,
                                                    col[i],lty[i],lwd[i])
     do.call(lines,final.args)
   }
+  #figure out some way of grabbing node coordinates
+  PP<-list(type=if(polarize) "fan"
+             else if(any(traits=="phylogram")) "phylogram"
+             else if(any(traits=="cladogram")) "cladogram"
+             else if(one.trait) "cladogram"
+             else "unrooted",
+           use.edge.length=TRUE,
+           node.pos=if(any(traits=="phylogram"|traits=="cladogram")) 1 else NULL,
+           node.depth=1,
+           show.tip.label=FALSE,
+           show.node.label=FALSE,
+           font=3,
+           cex=par("cex"),
+           adj=0,
+           srt=0,
+           no.margin=FALSE,
+           label.offset=0,
+           x.lim=args.ls[["xlim"]],
+           y.lim=args.ls[["ylim"]],
+           direction="rightwards", #only allow rightwards at moment, but may change at some point...
+           tip.color=rep(par("col"),length.out=Ntip(contsimmap)),
+           Ntip=Ntip(contsimmap),
+           Nnode=Nnode(contsimmap),
+           root.time=NULL,
+           align.tip.label=FALSE,
+           edge=attr(contsimmap,"tree")[[1]][["edge"]],
+           xx=node.xx,
+           yy=node.yy)
+  assign("last_plot.phylo",PP,envir=.PlotPhyloEnv)
 }

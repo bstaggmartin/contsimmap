@@ -2,6 +2,7 @@
 % Please edit documentation in R/contsimmap.R
 \docType{package}
 \name{contsimmap}
+\alias{contsimmap-package}
 \alias{contsimmap}
 \title{contsimmap: Simulating conntinuous ancestral states from phylogenetic comparative data}
 \description{

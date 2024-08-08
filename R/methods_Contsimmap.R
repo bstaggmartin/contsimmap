@@ -399,7 +399,7 @@ summary.contsimmap<-function(contsimmap,printlen=6,
   states<-.get.states(attr(contsimmap,"tree"))
   if(length(states)>1){
     cat("\n\nIncludes ",length(states)," mapped discrete character states:\n ",sep='',
-        .report.nms(nms=states,printlen=printlen))
+        .report.names(nms=states,printlen=printlen))
   }
   if(!is.null(params)){
     cat("\n\nParameter information:\n")
@@ -413,6 +413,7 @@ summary.contsimmap<-function(contsimmap,printlen=6,
 #and cols applys to number of states represented!
 #but system as a whole seems to be working well
 #need to also print out modifications of parameter values
+#' @export
 get.param.info<-function(contsimmap,traits=NULL,sims=NULL,printlen=6,
                          params=c("Xsig2","Ysig2","mu","trait.data","nobs"),
                          nrows=10,ncols=printlen,nslices=2,...){
