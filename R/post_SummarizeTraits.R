@@ -56,14 +56,12 @@ summarize.traits<-function(contsimmap,traits=NULL,FUN="mean",...){
     tmp<-do.call(cbind,x)
     tmp[]<-match(tmp,tmp.state)
     mode(tmp)<-"numeric"
-    tmp<-as.matrix(apply(tmp,1,tabulate,nbins=nstate)/ntree)
-    if(nstate>1){
-      tmp<-t(tmp)
-    }
+    tmp<-matrix(apply(tmp,1,tabulate,nbins=nstate)/ntree,
+                ncol=nstate,byrow=TRUE)
     colnames(tmp)<-tmp.state
     tmp
   }
-  state<-apply(state,1,foo)
+  state<-apply(state,1,foo,simplify=FALSE)
   incl<-lapply(tmp.seq,function(ii) rep(TRUE,lens[ii]))
   inds<-as.list(lens)
   tmp.dims<-dim(attr(contsimmap,'maps'))

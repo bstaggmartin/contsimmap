@@ -40,6 +40,79 @@
 
 
 
+#' Make a likelihood function with parameters dependent on continuous stochastic
+#' character mapped variables
+#' 
+#' This function uses continuous stochastic character maps (class "\code{contsimmap}")
+#' to generate a function that calculates the likelihood of a Brownian Motion model with
+#' parameters (e.g., rates, trends) that depend on mapped variables.
+#' 
+#' 
+#' 
+#' @param tree A phylogeny or list of phylogenies with or without mapped 
+#' continuous/discrete characters (classes "\code{contsimmap}", "\code{phylo}",
+#' "\code{multiPhylo}", "\code{simmap}", or "\code{multiSimmap}"). Lists of
+#' phylogenies with differing discrete character histories are allowed, but
+#' lists with \emph{differing topologies are currently not supported}! I plan to 
+#' implement "\code{multiContsimmap}"-type objects for this purpose in the 
+#' future.
+#' 
+#' @param trait.data A numeric matrix/vector or data frame specifying
+#' observed trait measurements to be modeled. Generally,
+#' rows should correspond to different observations while columns correspond 
+#' to different traits (vectors can only supply data for a single trait). Any 
+#' tip/node in the phylogeny may be associated with 0 or more observations; use 
+#' \code{NA} to specify missing trait measurements in the case of partial 
+#' observations (i.e., only a subset of traits were measured in a given 
+#' observation). 
+#' 
+#' To assign observations to tips/nodes, the data \emph{must} be
+#' labelled in some way according to 
+#' \code{tree$tip.label}/\code{tree$node.label} (node labels default to their 
+#' numeric index if not provided in \code{tree$node.label}). These labels must
+#' be provided as names for vectors, rownames for matrices, and 
+#' a column of factor/character data for data frames. In the case of data 
+#' frames, if multiple columns with factor/character data are found, the column 
+#' with the most matches to \code{tree$tip.label}/\code{tree$node.label} is 
+#' automatically chosen (any rownames are converted to a column before this 
+#' step). Trait names are simply taken from the column names of matrices/data 
+#' frames, and default to "\code{trait_<i>}" for the \code{<i>}th column of 
+#' trait data if not provided. 
+#' 
+#' To specify different trait data for different phylogenies included in \code{tree}, format \code{trait.data} instead as a list of 
+#' vectors/matrices/data frames (see Recycling Behavior section for further 
+#' explanation of parameter/formula recycling across phylogenies/individual continuous
+#' stochastic character maps). 
+#' 
+#' @param Xvar
+#' @param Xcor
+#' @param mu
+#' @param Yvar
+#' @param Ycor
+#' @param nsim
+#' @param root.nuisance.prior
+#' @param wgts,wgt.by.nobs
+#' @param tree.nuisance.prior \code{TRUE} or \code{FALSE}: should
+#' 
+#' @param vartol Should probably leave this alone unless you really know what 
+#' you're doing! If an estimated variance parameter (i.e., evolutionary rates and
+#' tip errors) falls below \code{vartol}, it is rounded down to 0. I picked the
+#' square root of machine epsilon as a default through personal experimentation.
+#' 
+#' In my experience with the outputs of this function,
+#' dividing by or inverting matrices with extremely small variances can result in 
+#' accumulating numerical errors during likelihood calculations, such
+#' that you generally get more accurate results just rounding small variances to
+#' 0 (the functions use "pseudoinversion" to be robust to this; see Hassler et al.
+#' 2020). Unlike the algorithm used to generate continuous stochastic character maps,
+#' outputted likelihood function explicitly check for contradictory trait data (i.e.,
+#' two different observations coming from a distribution inferred to have 0 variance).
+#' In this case, the outputted likelihood function returns a likelihood of 0 (or
+#' log-likelihood of \code{-Inf}).
+#' 
+#' @param ... Currenty unused; kept for backwards compatibility with earlier
+#' versions of function.
+#'
 #' @export
 make.lik.fun<-function(tree,trait.data,
                        Xvar=NULL,Xcor=NULL,

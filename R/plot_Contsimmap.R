@@ -372,9 +372,10 @@ plot.contsimmap<-function(contsimmap,
         attr(contsimmap,"params")<-params
         attr(contsimmap,"traits")[length(attr(contsimmap,"traits"))]<-ncol(params)
         names(attr(contsimmap,"traits"))[length(attr(contsimmap,"traits"))]<-"phylogram"
+        tmp.class<-class(contsimmap)
         contsimmap<-unclass(contsimmap)
         contsimmap[,"phylogram",]<-do.call(rbind,lapply(seq_along(tmp$yy),function(ii) lapply(nts[ii,],rep,x=tmp$yy[nodes[ii]])))
-        class(contsimmap)<-"contsimmap"
+        class(contsimmap)<-tmp.class
       }
       if(any(traits=="cladogram")){
         anc.nodes<-tmp$edge[tmp.edges,1]
@@ -390,9 +391,10 @@ plot.contsimmap<-function(contsimmap,
         attr(contsimmap,"params")<-params
         attr(contsimmap,"traits")[length(attr(contsimmap,"traits"))]<-ncol(params)
         names(attr(contsimmap,"traits"))[length(attr(contsimmap,"traits"))]<-"cladogram"
+        tmp.class<-class(contsimmap)
         contsimmap<-unclass(contsimmap)
         contsimmap[,"cladogram",]<-do.call(rbind,lapply(seq_along(tmp$yy),function(ii) lapply(dts[ii,],function(jj) diffs[ii]*jj^(1/curviness)+tmp$yy[anc.nodes[ii]])))
-        class(contsimmap)<-"contsimmap"
+        class(contsimmap)<-tmp.class
       }
     }
     traits<-pmatch(traits,dimnames(contsimmap)[[2]])
@@ -423,12 +425,16 @@ plot.contsimmap<-function(contsimmap,
   extractions<-setNames(rep(list(rep(list(NA),2*len)),length(things.to.extract)),things.to.extract)
   if(any(traits=="phylogram")){
     if(polarize){
+      state.foo<-if(inherits(contsimmap,"summarized_contsimmap"))
+        lapply(parsed.contsimmap[[1]],function(ii) ii[["states"]][c(rep(1,100),seq_len(nrow(ii[["states"]]))),,drop=FALSE])
+      else
+        lapply(parsed.contsimmap[[1]],function(ii) ii[["states"]][c(rep(1,100),seq_along(ii[["states"]]))])
       lens<-lens+100
       extractions[[1]][c(TRUE,FALSE)]<-lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[1],lens[ii]))
       for(i in things.to.extract[-1]){
         extractions[[i]][c(TRUE,FALSE)]<-switch(i,
                                                 simulation=lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[3],lens[ii])),
-                                                state=lapply(parsed.contsimmap[[1]],function(ii) ii[["states"]][c(rep(1,100),seq_along(ii[["states"]]))]),
+                                                state=state.foo,
                                                 time=lapply(parsed.contsimmap[[1]],function(ii) ii[["ts"]][c(rep(1,100),seq_along(ii[["ts"]]))]),
                                                 phylogram=lapply(parsed.contsimmap[[i]],function(ii) c(ii[["values"]][1],
                                                                                                        (ii[["values"]][2]-ii[["values"]][1])*seq(0.01,1,0.01)+ii[["values"]][1],
@@ -436,12 +442,16 @@ plot.contsimmap<-function(contsimmap,
                                                 lapply(parsed.contsimmap[[i]],function(ii) ii[["values"]][c(rep(1,100),seq_along(ii[["values"]]))]))
       }
     }else{
+      state.foo<-if(inherits(contsimmap,"summarized_contsimmap"))
+        lapply(parsed.contsimmap[[1]],function(ii) ii[["states"]][c(1,seq_len(nrow(ii[["states"]]))),,drop=FALSE])
+      else
+        lapply(parsed.contsimmap[[1]],function(ii) ii[["states"]][c(1,seq_along(ii[["states"]]))])
       lens<-lens+1
       extractions[[1]][c(TRUE,FALSE)]<-lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[1],lens[ii]))
       for(i in things.to.extract[-1]){
         extractions[[i]][c(TRUE,FALSE)]<-switch(i,
                                                 simulation=lapply(tmp.seq,function(ii) rep(attr(parsed.contsimmap[[1]][[ii]],'info')[3],lens[ii])),
-                                                state=lapply(parsed.contsimmap[[1]],function(ii) ii[["states"]][c(1,seq_along(ii[["states"]]))]),
+                                                state=state.foo,
                                                 time=lapply(parsed.contsimmap[[1]],function(ii) ii[["ts"]][c(1,seq_along(ii[["ts"]]))]),
                                                 phylogram=lapply(parsed.contsimmap[[i]],function(ii) ii[["values"]][c(1,2,seq_along(ii[["values"]])[-1])]),
                                                 lapply(parsed.contsimmap[[i]],function(ii) ii[["values"]][c(1,seq_along(ii[["values"]]))]))

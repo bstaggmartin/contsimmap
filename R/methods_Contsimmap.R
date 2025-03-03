@@ -36,6 +36,24 @@
   }
 }
 
+#dim and length are generics, so might as well make custom method...
+# dim.contsimmap<-function(x){
+#   out<-dim(unclass(x))
+#   out[1]<-out[1]-sum(grepl('N',dimnames(x)[[1]]))
+#   unname(out)
+# }
+# length.contsimmap<-function(x){
+#   
+# }
+#wait...except that this will undoubtedly break many other functions...
+#yeah, worth looking into in future, but might wanna go with hacky gsub way for now...
+
+#then I just have custom lengths method...
+#' @export
+lengths.contsimmap<-function(x,...){
+  lengths(unclass(x),...)
+}
+
 .check.seq<-function(dp.x,dp.i,only.rows=FALSE){
   if(only.rows){
     patterns<-paste0(c('dim','(nrow|NROW)'),
