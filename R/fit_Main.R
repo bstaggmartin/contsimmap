@@ -92,7 +92,8 @@
 #' @param nsim
 #' @param root.nuisance.prior
 #' @param wgts,wgt.by.nobs
-#' @param tree.nuisance.prior \code{TRUE} or \code{FALSE}: should
+#' @param tree.prior.exp
+#' @param tree.balance.prior
 #' 
 #' @param vartol Should probably leave this alone unless you really know what 
 #' you're doing! If an estimated variance parameter (i.e., evolutionary rates and
@@ -120,15 +121,41 @@ make.lik.fun<-function(tree,trait.data,
                        Yvar=NULL,Ycor=NULL,
                        nsim=NULL,
                        root.nuisance.prior=FALSE,
-                       wgts=1,wgt.by.nobs=TRUE,tree.nuisance.prior=FALSE,
+                       wgts=1,wgt.by.nobs=TRUE,
+                       outlier.cutoff=0,winsorize=TRUE,
+                       tree.prior.exp=1,tree.balance.prior=FALSE,
                        vartol=sqrt(.Machine$double.eps),
                        ...){
   
   ####INITIAL INPUT PROCESSING####
   
   if(hasArg(nuisance.prior)){
-    tree.nuisance.prior<-list(...)[["nuisance.prior"]]
+    if(list(...)[["nuisance.prior"]]){
+      tree.prior.exp<-2
+    }else{
+      tree.prior.exp<-1
+    }
   }
+  if(hasArg(tree.nuisance.prior)){
+    if(list(...)[["tree.nuisance.prior"]]){
+      tree.prior.exp<-2
+    }else{
+      tree.prior.exp<-1
+    }
+  }
+  
+  if(outlier.cutoff>0){
+    if(outlier.cutoff>1){
+      stop("outlier cutoff cannot exceed 100% (and probably shouldn't even come close to that)")
+    }
+    quant.cutoffs<-c(outlier.cutoff/2,1-outlier.cutoff/2)
+    outlier.cutoff<-TRUE
+  }else{
+    outlier.cutoff<-FALSE
+  }
+  #little helper flag for later...
+  LL.ind.flag<-FALSE
+  
   if(inherits(tree,"contsimmap")){
     if(nedge(tree)<Nedge(tree)){
       if(length(.stored.nodes(tree))==1){
@@ -169,7 +196,7 @@ make.lik.fun<-function(tree,trait.data,
     wgts<-wgts-tmp.nobs*log(2*pi)/2
   }
   wgts<-wgts-max(wgts)
-  wgts<-wgts-log(sum(exp(wgts)))+log(nsim)
+  wgts<-wgts-log(sum(exp(wgts)))
   
   ####GETTING PARAMETER FORMULAE####
   
@@ -1328,15 +1355,77 @@ make.lik.fun<-function(tree,trait.data,
       if(mult.traits) cors[[2]]<-tmp[[4]]
     }
     LL<-wgts+RR[[1]]
+    
+    #is there something you can do here to make numerical gradient calculation better???
+    #seems difficult with these more exotic priors...
+    
+    #probably could make this a bit more elegant and less hacky...
+    # if(LL.cap){
+    #   cutoff<-quantile(LL,prob=cap.quant)
+    #   if(cutoff>min(LL)){
+    #     LL.inds<-LL<cutoff
+    #     LL<-LL[LL.inds]
+    #     LL<-LL+log(nsim-sum(!LL.inds))
+    #   }else{
+    #     LL.inds<-rep(TRUE,nsim)
+    #     LL<-LL+log(nsim)
+    #   }
+    # }else{
+    #   LL<-LL+log(nsim)
+    # }
+    #an alt procedure would be to simply round down to cutoff...would this be better?
+    #may have some advantages wrt to dummy models not being overly "stunted", yet...
+    #makes the likelihood surface seem WAY more multimodal, which would be undesirable here...
+    
+    #now allowing both options (trimming/winsorization) in two-tailed manner
+    #trimming = ignore outliers
+    #winsorization = censor outliers by rounding to cutoff
+    #(trimming extremely small outliers should help with dummy model competitiveness, right?)
+    if(outlier.cutoff){
+      cutoffs<-quantile(LL,prob=quant.cutoffs)
+      if(winsorize){
+        LL[LL<cutoffs[1]]<-cutoffs[1]
+        LL[LL>cutoffs[2]]<-cutoffs[2]
+      }else{
+        LL.inds<-LL<cutoffs[1]|LL>cutoffs[2]
+        n.otl<-sum(LL.inds)
+        if(n.otl>0&n.otl<nsim){
+          LL<-LL[LL.inds]
+          nsim<-nsim-n.otl
+          LL.ind.flag<-TRUE
+        }
+      }
+    }
+    LL<-LL+log(nsim)
+    
+    if(tree.balance.prior){
+      max.LL<-max(LL)
+      tmp<-log(sum(exp(LL-max.LL)))+max.LL-LL
+      LL<-LL+log(tmp)-log(sum(tmp))
+    }else{
+      #should be numerically stable now
+      tmp<-(tree.prior.exp-1)*LL
+      max.LL<-max(tmp)
+      LL<-tree.prior.exp*LL-log(sum(exp(tmp-max.LL)))-max.LL
+    }
+    
+    #one last thing to try...
+    #you can try "capping" the top log(nsim) weights
+    #this is common in importance sampling
+    #could allow you to do the nuisance prior while still "balancing" likelihoods...
+    #but would that be any better than the flat prior? feels like it wouldn't...
+    #but still might be worth a try...
+    
     max.LL<-max(LL)
     LL<-exp(LL-max.LL)
-    if(tree.nuisance.prior){
-      log.sum.LL<-log(sum(LL))
-      LL<-LL^2
-      out.lik<-log(sum(LL))-log.sum.LL+max.LL
-    }else{
-      out.lik<-log(sum(LL))-log(nsim)+max.LL
+    out.lik<-log(sum(LL))+max.LL
+    
+    if(LL.ind.flag){
+      old.LL<-LL
+      LL<-RR.holder
+      LL[LL.inds]<-old.LL
     }
+    
     if(is.na(out.lik)){
       -Inf
     }else{

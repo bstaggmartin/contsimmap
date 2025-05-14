@@ -71,6 +71,12 @@ accumulate<-function(x,FUN="+",...,forget.prev=FALSE,root.val=NULL){
   nts<-rbind(1,.get.ns(contsimmap))
   
   #hack to more easily specify root/initial values...
+  if(forget.prev){
+    #now do this BEFORE specifying root values to ensure root value is properly "forgotten"
+    #could be more efficient here for sure
+    #because all tmp.xs elements other than the first have forget.prev=TRUE implicitly...
+    tmp.xs.old<-tmp.xs
+  }
   if(!is.null(root.val)){
     root.val<-rep(root.val,length.out=length(treeID))
     for(t in tree.seq){
@@ -79,9 +85,6 @@ accumulate<-function(x,FUN="+",...,forget.prev=FALSE,root.val=NULL){
   }
   
   if(forget.prev){
-    #could be more efficient here for sure
-    #because all tmp.xs elements other than the first have forget.prev=TRUE implicitly...
-    tmp.xs.old<-tmp.xs
     for(e in rev(prune.seq)[-1]){
       for(t in tree.seq){
         for(l in seq_len(ntraits)){
