@@ -6,6 +6,16 @@
 #   filled in with defaults (identity for Xsig2, 0s for mu/Ysig2/nobs/X0)
 #    - Entries of nobs corresponding to internal nodes are never derived from recycling and always default to 0 if unspecified
 
+# It turns out my original method (pre-August 2025) of
+# "resolving" infinite precisions (i.e., what you get when there are
+# evolutionary rates of 0, 0-length edges, and/or exact measurements) was only
+# exact for univariate trait data and just a pretty good approximation for
+# multivariate traits provided weak to moderate evolutionary correlations. I
+# really tried to work out an exact solution, but the most general strategy
+# seems to be simply replacing infinities with arbitrarily high numbers during
+# intermediate calculations. The default value of 1e10 should be pretty robust...
+#I can imagine certain edge cases perhaps, but nothing I'm super worried about?
+#Time will tell...
 
 #' @rdname make.contsimmap
 #' 
@@ -259,6 +269,15 @@ sim.conthistory<-function(tree,ntraits=1,traits=paste0('trait_',seq_len(ntraits)
 #' \code{FALSE}.
 #' 
 #' 
+#' @param inf.const The number to which infinite precisions get set to. The
+#' default value of 1e10 is a very large number and should work in most
+#' situations, but may need to be raised if the reciprocal of any non-zero
+#' evolutionary rates and/or intraspecific/measurement error variances are of
+#' similar magnitude (i.e., 1e-9ish; you should probably rescale your data
+#' anyways if this is the case). On the other hand, if you get any
+#' "computationally singular" errors, you may need to lower this number.
+#' 
+#' 
 #' 
 #' @return An object of class "\code{contsimmap}", which is essentially a
 #' fancy 3D array-shaped list with rows corresponding to edges, columns
@@ -418,7 +437,8 @@ sim.conthistory<-function(tree,ntraits=1,traits=paste0('trait_',seq_len(ntraits)
 make.contsimmap<-function(tree,trait.data,
                           nsims=100,res=100,
                           Xsig2=NULL,Ysig2=NULL,mu=NULL,
-                          verbose=FALSE){
+                          verbose=FALSE,
+                          inf.const=1e10){
   #takes care of all the necessary formatting work...
   list2env(.prep.contsimmap(tree,nsims,res,trait.data,Xsig2,Ysig2,mu,TRUE),envir=environment())
   
@@ -427,7 +447,8 @@ make.contsimmap<-function(tree,trait.data,
                       maps,
                       parsed.obs,parsed.mis,nobs,Xsig2,Ysig2[,Yperm,drop=FALSE],mu,lookup,
                       nts,NTS,t1s,seed,x,v,dx,dv,
-                      verbose=verbose)
+                      verbose=verbose,
+                      inf.const=inf.const)
   
   #format output
   attr(x,'ts')<-ts

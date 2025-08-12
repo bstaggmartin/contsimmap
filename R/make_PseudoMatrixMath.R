@@ -119,37 +119,41 @@
   arr
 }
 
-.resolve.infs.ls<-function(arr.ls,dim1,dim2,k,diag.inds,precedence=FALSE){
-  if(precedence){
-    ones<-is.infinite(arr.ls[[1]][diag.inds])
-    if(any(ones)){
-      zeros<-array(rep(ones,each=k),c(k,k,dim1))
-      zeros<-zeros|aperm(zeros,c(2,1,3))
-      for(i in seq_len(dim2)){
-        arr.ls[[i]][zeros]<-0
-      }
-      arr.ls[[1]][diag.inds][ones]<-1
-    }
-  }
-  ones<-lapply(arr.ls,function(ii) is.infinite(ii[diag.inds]))
-  zeros<-array(rep(Reduce('|',ones),each=k),c(k,k,dim1))
-  if(any(zeros)){
-    zeros<-zeros|aperm(zeros,c(2,1,3))
-    for(i in seq_len(dim2)){
-      arr.ls[[i]][zeros]<-0
-      arr.ls[[i]][diag.inds][ones[[i]]]<-1
-    }
+.resolve.infs.ls<-function(arr.ls,dim1,dim2,k,diag.inds,precedence=FALSE,inf.const=1e10){
+  # if(precedence){
+  #   ones<-is.infinite(arr.ls[[1]][diag.inds])
+  #   if(any(ones)){
+  #     zeros<-array(rep(ones,each=k),c(k,k,dim1))
+  #     zeros<-zeros|aperm(zeros,c(2,1,3))
+  #     for(i in seq_len(dim2)){
+  #       arr.ls[[i]][zeros]<-0
+  #     }
+  #     arr.ls[[1]][diag.inds][ones]<-1
+  #   }
+  # }
+  # ones<-lapply(arr.ls,function(ii) is.infinite(ii[diag.inds]))
+  # zeros<-array(rep(Reduce('|',ones),each=k),c(k,k,dim1))
+  # if(any(zeros)){
+  #   zeros<-zeros|aperm(zeros,c(2,1,3))
+  #   for(i in seq_len(dim2)){
+  #     arr.ls[[i]][zeros]<-0
+  #     arr.ls[[i]][diag.inds][ones[[i]]]<-1
+  #   }
+  # }
+  for(i in seq_len(dim2)){
+    arr.ls[[i]][is.infinite(arr.ls[[i]])]<-inf.const
   }
   nulls<-unlist(lapply(arr.ls,function(ii) is.null(dim(ii))),use.names=FALSE)
   arr.ls[nulls]<-lapply(arr.ls[nulls],function(ii) array(ii,c(k,k,dim1)))
   arr.ls
 }
 
-.resolve.infs<-function(arr,dim,k,diag.inds){
-  ones<-matrix(is.infinite(arr[diag.inds]),k,dim)
-  zeros<-apply(ones,1,any)
-  zeros<-zeros|rep(zeros,each=k)
-  arr[zeros]<-0
-  arr[diag.inds][ones]<-1
+.resolve.infs<-function(arr,dim,k,diag.inds,inf.const=1e10){
+  # ones<-matrix(is.infinite(arr[diag.inds]),k,dim)
+  # zeros<-apply(ones,1,any)
+  # zeros<-zeros|rep(zeros,each=k)
+  # arr[zeros]<-0
+  # arr[diag.inds][ones]<-1
+  arr[is.infinite(arr)]<-inf.const
   arr
 }
